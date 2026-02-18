@@ -16,6 +16,11 @@ venv/
 env/
 ENV/
 
+# Local secrets
+.env
+.env.*
+!.env.example
+
 # Django stuff
 *.log
 db.sqlite3
