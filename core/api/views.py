@@ -60,11 +60,13 @@ class TaskViewSet(viewsets.ModelViewSet):
         )
 
     def list(self, request, *args, **kwargs):
-        self._required_profile_id_from_query()
+        profile_id = self._required_profile_id_from_query()
+        self._profile_or_404(profile_id)
         return super().list(request, *args, **kwargs)
 
     def retrieve(self, request, *args, **kwargs):
-        self._required_profile_id_from_query()
+        profile_id = self._required_profile_id_from_query()
+        self._profile_or_404(profile_id)
         return super().retrieve(request, *args, **kwargs)
 
     @action(detail=True, methods=["post"], url_path="habit-increment", url_name="habit-increment")
