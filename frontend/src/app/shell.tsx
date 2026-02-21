@@ -9,8 +9,7 @@ export function AppShell({ children }: PropsWithChildren) {
       <header className="app-header">
         <div className="brand-and-nav">
           <div className="brand">
-            <h1>taskweb</h1>
-            <p>React frontend</p>
+            <h1>Taskweb</h1>
           </div>
           <nav className="top-nav">
             <NavLink to="/tasks">Tasks</NavLink>
