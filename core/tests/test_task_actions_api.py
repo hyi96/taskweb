@@ -12,7 +12,7 @@ from core.models import LogEntry, Profile, Task
 User = get_user_model()
 
 
-class TaskActionApiTests(TestCase):
+class TestTaskActionApi(TestCase):
     def setUp(self):
         self.client = APIClient()
         self.user = User.objects.create_user(username="alice", password="pass1234")

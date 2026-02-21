@@ -56,7 +56,7 @@ const TARGET_VALUE_OPTIONS: Record<TargetType, Array<{ value: TargetValueKey; la
   activity: [{ value: "time_spent", label: "Total Time Spent (minutes)" }]
 };
 
-function startOfWeekMonday(date: Date) {
+export function startOfWeekMonday(date: Date) {
   const copy = new Date(date);
   const day = copy.getDay();
   const diff = (7 + (day - 1)) % 7;
@@ -65,7 +65,7 @@ function startOfWeekMonday(date: Date) {
   return copy;
 }
 
-function createBuckets(resolution: TimeResolution): Bucket[] {
+export function createBuckets(resolution: TimeResolution): Bucket[] {
   const now = new Date();
   const buckets: Bucket[] = [];
   if (resolution === "hour") {
@@ -117,7 +117,7 @@ function createBuckets(resolution: TimeResolution): Bucket[] {
   return buckets;
 }
 
-function bucketIndexFor(ts: Date, buckets: Bucket[]) {
+export function bucketIndexFor(ts: Date, buckets: Bucket[]) {
   for (let i = 0; i < buckets.length; i += 1) {
     if (ts >= buckets[i].start && ts < buckets[i].end) {
       return i;
@@ -126,7 +126,7 @@ function bucketIndexFor(ts: Date, buckets: Bucket[]) {
   return -1;
 }
 
-function durationToMinutes(duration: string | null) {
+export function durationToMinutes(duration: string | null) {
   if (!duration) return 0;
   const parts = duration.split(":");
   if (parts.length < 3) return 0;
@@ -137,7 +137,7 @@ function durationToMinutes(duration: string | null) {
   return hours * 60 + minutes + seconds / 60;
 }
 
-function buildSearchOptions(tasks: Task[], logs: LogEntry[]): SearchOption[] {
+export function buildSearchOptions(tasks: Task[], logs: LogEntry[]): SearchOption[] {
   const fromTasks = tasks.map((task) => ({
     targetType: task.task_type as TargetType,
     entityId: task.id,
@@ -157,7 +157,7 @@ function buildSearchOptions(tasks: Task[], logs: LogEntry[]): SearchOption[] {
   return [...fromTasks, ...activities];
 }
 
-function getInstances(tasks: Task[], logs: LogEntry[], targetType: TargetType): TargetInstance[] {
+export function getInstances(tasks: Task[], logs: LogEntry[], targetType: TargetType): TargetInstance[] {
   if (targetType === "gold") {
     return [{ id: null, name: "All Gold" }];
   }
@@ -169,7 +169,7 @@ function getInstances(tasks: Task[], logs: LogEntry[], targetType: TargetType): 
   return tasks.filter((task) => task.task_type === targetType).map((task) => ({ id: task.id, name: task.title }));
 }
 
-function aggregateValues(
+export function aggregateValues(
   buckets: Bucket[],
   logs: LogEntry[],
   tasks: Task[],

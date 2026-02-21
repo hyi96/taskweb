@@ -11,6 +11,8 @@ from core.api.serializers import (
     ActionSerializer,
     ChecklistItemSerializer,
     LogEntrySerializer,
+    NewDayPreviewSerializer,
+    NewDayStartSerializer,
     ProfileSerializer,
     StreakBonusRuleSerializer,
     TagSerializer,
@@ -20,9 +22,12 @@ from core.api.serializers import (
 from core.models import ChecklistItem, LogEntry, Profile, StreakBonusRule, Tag, Task
 from core.services.task_actions import (
     daily_complete,
+    get_uncompleted_dailies_from_previous_period,
     habit_increment,
     log_activity_duration,
+    refresh_profile_period_state,
     reward_claim,
+    start_new_day,
     todo_complete,
 )
 
@@ -198,11 +203,21 @@ class TaskViewSet(ProfileScopedMixin, viewsets.ModelViewSet):
         )
 
     def list(self, request, *args, **kwargs):
-        self._required_profile_id_from_query()
+        profile_id = self._required_profile_id_from_query()
+        profile = self._profile_or_404(profile_id)
+        try:
+            refresh_profile_period_state(profile=profile, user=request.user)
+        except DjangoValidationError as exc:
+            raise _to_drf_validation_error(exc) from exc
         return super().list(request, *args, **kwargs)
 
     def retrieve(self, request, *args, **kwargs):
-        self._required_profile_id_from_query()
+        profile_id = self._required_profile_id_from_query()
+        profile = self._profile_or_404(profile_id)
+        try:
+            refresh_profile_period_state(profile=profile, user=request.user)
+        except DjangoValidationError as exc:
+            raise _to_drf_validation_error(exc) from exc
         return super().retrieve(request, *args, **kwargs)
 
     def create(self, request, *args, **kwargs):
@@ -225,6 +240,10 @@ class TaskViewSet(ProfileScopedMixin, viewsets.ModelViewSet):
     def habit_increment_action(self, request, pk=None):
         data = self._action_payload(request)
         profile = self._profile_or_404(data["profile_id"])
+        try:
+            refresh_profile_period_state(profile=profile, user=request.user)
+        except DjangoValidationError as exc:
+            raise _to_drf_validation_error(exc) from exc
         task = self._task_or_404(profile, pk)
         try:
             updated_task = habit_increment(
@@ -242,6 +261,10 @@ class TaskViewSet(ProfileScopedMixin, viewsets.ModelViewSet):
     def daily_complete_action(self, request, pk=None):
         data = self._action_payload(request)
         profile = self._profile_or_404(data["profile_id"])
+        try:
+            refresh_profile_period_state(profile=profile, user=request.user)
+        except DjangoValidationError as exc:
+            raise _to_drf_validation_error(exc) from exc
         task = self._task_or_404(profile, pk)
         try:
             updated_task = daily_complete(
@@ -259,6 +282,10 @@ class TaskViewSet(ProfileScopedMixin, viewsets.ModelViewSet):
     def todo_complete_action(self, request, pk=None):
         data = self._action_payload(request)
         profile = self._profile_or_404(data["profile_id"])
+        try:
+            refresh_profile_period_state(profile=profile, user=request.user)
+        except DjangoValidationError as exc:
+            raise _to_drf_validation_error(exc) from exc
         task = self._task_or_404(profile, pk)
         try:
             updated_task = todo_complete(
@@ -275,6 +302,10 @@ class TaskViewSet(ProfileScopedMixin, viewsets.ModelViewSet):
     def reward_claim_action(self, request, pk=None):
         data = self._action_payload(request)
         profile = self._profile_or_404(data["profile_id"])
+        try:
+            refresh_profile_period_state(profile=profile, user=request.user)
+        except DjangoValidationError as exc:
+            raise _to_drf_validation_error(exc) from exc
         task = self._task_or_404(profile, pk)
         try:
             updated_task = reward_claim(
@@ -322,3 +353,34 @@ class ActivityDurationViewSet(ProfileScopedMixin, mixins.CreateModelMixin, views
         except DjangoValidationError as exc:
             raise _to_drf_validation_error(exc) from exc
         return Response(LogEntrySerializer(entry).data, status=status.HTTP_201_CREATED)
+
+
+class NewDayViewSet(ProfileScopedMixin, viewsets.ViewSet):
+    permission_classes = [IsAuthenticated]
+
+    def list(self, request):
+        profile_id = self._required_profile_id_from_query()
+        profile = self._profile_or_404(profile_id)
+        try:
+            refresh_profile_period_state(profile=profile, user=request.user)
+            dailies = get_uncompleted_dailies_from_previous_period(profile=profile, user=request.user)
+        except DjangoValidationError as exc:
+            raise _to_drf_validation_error(exc) from exc
+        payload = {"profile_id": str(profile.id), "dailies": dailies}
+        serializer = NewDayPreviewSerializer(payload)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+    def create(self, request):
+        serializer = NewDayStartSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+        profile = self._profile_or_404(data["profile_id"])
+        try:
+            result = start_new_day(
+                profile=profile,
+                user=request.user,
+                checked_daily_ids=data.get("checked_daily_ids", []),
+            )
+        except DjangoValidationError as exc:
+            raise _to_drf_validation_error(exc) from exc
+        return Response(result, status=status.HTTP_200_OK)

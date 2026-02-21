@@ -4,6 +4,7 @@ from core.api.views import (
     ActivityDurationViewSet,
     ChecklistItemViewSet,
     LogEntryViewSet,
+    NewDayViewSet,
     ProfileViewSet,
     StreakBonusRuleViewSet,
     TagViewSet,
@@ -18,5 +19,6 @@ router.register("checklist-items", ChecklistItemViewSet, basename="checklist-ite
 router.register("streak-bonus-rules", StreakBonusRuleViewSet, basename="streak-bonus-rule")
 router.register("logs", LogEntryViewSet, basename="log")
 router.register("activity-duration", ActivityDurationViewSet, basename="activity-duration")
+router.register("new-day", NewDayViewSet, basename="new-day")
 
 urlpatterns = router.urls

@@ -8,6 +8,12 @@ from django.db import transaction
 from django.utils import timezone
 
 from core.models import LogEntry, Profile, Task
+from core.services.periods import (
+    daily_period_start,
+    habit_reset_period_start,
+    local_date_from_dt,
+    previous_daily_period_start,
+)
 
 CENT = Decimal("0.01")
 
@@ -45,6 +51,66 @@ def _save_task_profile_log(*, task: Task, profile: Profile, log: LogEntry, task_
     profile.save(update_fields=["gold_balance"])
     log.full_clean()
     log.save()
+
+
+def _get_daily_period_start_for_task(*, task: Task, target_date):
+    anchor = timezone.localtime(task.created_at).date()
+    cadence = task.repeat_cadence or Task.Cadence.DAY
+    return daily_period_start(
+        target_date=target_date,
+        cadence=cadence,
+        repeat_every=task.repeat_every,
+        anchor_date=anchor,
+    )
+
+
+def _apply_habit_reset_if_needed(*, task: Task, today):
+    cadence = task.count_reset_cadence
+    if cadence in {None, "", Task.Cadence.NEVER}:
+        return False
+    if task.current_count == 0:
+        return False
+    anchor_dt = task.last_action_at or task.created_at
+    anchor_date = timezone.localtime(anchor_dt).date()
+    current_period = habit_reset_period_start(target_date=today, cadence=cadence)
+    anchor_period = habit_reset_period_start(target_date=anchor_date, cadence=cadence)
+    if anchor_period >= current_period:
+        return False
+    task.current_count = Decimal("0.00")
+    return True
+
+
+@transaction.atomic
+def refresh_profile_period_state(*, profile: Profile, user, timestamp: datetime | None = None) -> None:
+    """Refresh cadence-driven task state at read-time (daily streak rollover, habit reset rollover)."""
+    now = _as_aware_timestamp(timestamp)
+    today = local_date_from_dt(now)
+
+    locked_profile = Profile.objects.select_for_update().get(id=profile.id)
+    if locked_profile.account_id != user.id:
+        raise ValidationError({"profile_id": "Profile does not belong to the authenticated user."})
+
+    dailies = list(Task.objects.select_for_update().filter(profile=locked_profile, task_type=Task.TaskType.DAILY))
+    habits = list(Task.objects.select_for_update().filter(profile=locked_profile, task_type=Task.TaskType.HABIT))
+
+    for daily in dailies:
+        if daily.last_completion_period is None:
+            continue
+        current_period = _get_daily_period_start_for_task(task=daily, target_date=today)
+        expected_prev = previous_daily_period_start(
+            current_period_start=current_period,
+            cadence=daily.repeat_cadence or Task.Cadence.DAY,
+            repeat_every=daily.repeat_every,
+        )
+        if daily.last_completion_period < expected_prev and daily.current_streak != 0:
+            daily.current_streak = 0
+            daily.full_clean()
+            daily.save(update_fields=["current_streak", "updated_at"])
+
+    for habit in habits:
+        if _apply_habit_reset_if_needed(task=habit, today=today):
+            habit.full_clean()
+            habit.save(update_fields=["current_count", "updated_at"])
 
 
 @transaction.atomic
@@ -109,12 +175,22 @@ def daily_complete(
     if task.task_type != Task.TaskType.DAILY:
         raise ValidationError({"task_type": "This action is only valid for daily tasks."})
 
-    period = completion_period or timestamp.date()
+    input_date = completion_period or local_date_from_dt(timestamp)
+    period = _get_daily_period_start_for_task(task=task, target_date=input_date)
     if task.last_completion_period == period:
         raise ValidationError({"completion_period": "Task is already completed for this period."})
 
+    previous_period = previous_daily_period_start(
+        current_period_start=period,
+        cadence=task.repeat_cadence or Task.Cadence.DAY,
+        repeat_every=task.repeat_every,
+    )
+    if task.last_completion_period == previous_period:
+        task.current_streak += 1
+    else:
+        task.current_streak = 1
+
     task.last_completion_period = period
-    task.current_streak += 1
     task.best_streak = max(task.best_streak, task.current_streak)
     task.last_action_at = timestamp
     task.total_actions_count += 1
@@ -156,6 +232,92 @@ def daily_complete(
         ],
     )
     return task
+
+
+def get_uncompleted_dailies_from_previous_period(*, profile: Profile, user, timestamp: datetime | None = None):
+    now = _as_aware_timestamp(timestamp)
+    today = local_date_from_dt(now)
+    if profile.account_id != user.id:
+        raise ValidationError({"profile_id": "Profile does not belong to the authenticated user."})
+
+    results = []
+    dailies = Task.objects.filter(profile=profile, task_type=Task.TaskType.DAILY).order_by("title")
+    for daily in dailies:
+        current_period = _get_daily_period_start_for_task(task=daily, target_date=today)
+        previous_period = previous_daily_period_start(
+            current_period_start=current_period,
+            cadence=daily.repeat_cadence or Task.Cadence.DAY,
+            repeat_every=daily.repeat_every,
+        )
+        # If task is already completed in the current period, do not prompt
+        # "new day" backfill for the previous period.
+        if daily.last_completion_period == current_period:
+            continue
+        if current_period == previous_period:
+            continue
+        if daily.last_completion_period == previous_period:
+            continue
+        results.append(
+            {
+                "id": str(daily.id),
+                "title": daily.title,
+                "previous_period_start": previous_period.isoformat(),
+                "last_completion_period": daily.last_completion_period.isoformat() if daily.last_completion_period else None,
+                "repeat_cadence": daily.repeat_cadence,
+                "repeat_every": daily.repeat_every,
+            }
+        )
+    return results
+
+
+@transaction.atomic
+def start_new_day(
+    *,
+    profile: Profile,
+    user,
+    checked_daily_ids: list,
+    timestamp: datetime | None = None,
+):
+    now = _as_aware_timestamp(timestamp)
+    today = local_date_from_dt(now)
+    locked_profile = Profile.objects.select_for_update().get(id=profile.id)
+    if locked_profile.account_id != user.id:
+        raise ValidationError({"profile_id": "Profile does not belong to the authenticated user."})
+
+    updated = 0
+    checked_set = {str(value) for value in checked_daily_ids}
+    dailies = list(
+        Task.objects.select_for_update().filter(profile=locked_profile, task_type=Task.TaskType.DAILY, id__in=checked_set)
+    )
+    for daily in dailies:
+        current_period = _get_daily_period_start_for_task(task=daily, target_date=today)
+        previous_period = previous_daily_period_start(
+            current_period_start=current_period,
+            cadence=daily.repeat_cadence or Task.Cadence.DAY,
+            repeat_every=daily.repeat_every,
+        )
+        # Never overwrite a completion already recorded in current period.
+        if daily.last_completion_period == current_period:
+            continue
+        if daily.last_completion_period == previous_period:
+            continue
+        if daily.last_completion_period:
+            expected_prev = previous_daily_period_start(
+                current_period_start=previous_period,
+                cadence=daily.repeat_cadence or Task.Cadence.DAY,
+                repeat_every=daily.repeat_every,
+            )
+            daily.current_streak = daily.current_streak + 1 if daily.last_completion_period == expected_prev else 1
+        else:
+            daily.current_streak = 1
+        daily.best_streak = max(daily.best_streak, daily.current_streak)
+        daily.last_completion_period = previous_period
+        daily.full_clean()
+        daily.save(update_fields=["current_streak", "best_streak", "last_completion_period", "updated_at"])
+        updated += 1
+
+    refresh_profile_period_state(profile=locked_profile, user=user, timestamp=now)
+    return {"updated_count": updated}
 
 
 @transaction.atomic

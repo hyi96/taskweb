@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
 import { ApiError } from "../../shared/api/client";
 import { replaceChecklistItems } from "../../shared/api/checklist";
+import { fetchNewDayPreview, startNewDay } from "../../shared/api/newDay";
 import { replaceStreakRules } from "../../shared/api/streakRules";
 import { fetchTags } from "../../shared/api/tags";
 import {
@@ -14,6 +15,7 @@ import {
   todoComplete,
   updateTask
 } from "../../shared/api/tasks";
+import type { NewDayPreviewItem } from "../../shared/types/newDay";
 import type { Task } from "../../shared/types/task";
 import { useCurrentActivity } from "../activity/CurrentActivityContext";
 import { useProfileContext } from "../profiles/ProfileContext";
@@ -92,7 +94,7 @@ type EditorState = {
   task: Task | null;
 };
 
-function localDateString() {
+export function localDateString() {
   const now = new Date();
   const year = now.getFullYear();
   const month = String(now.getMonth() + 1).padStart(2, "0");
@@ -100,11 +102,11 @@ function localDateString() {
   return `${year}-${month}-${day}`;
 }
 
-function toNumber(value: string | number) {
+export function toNumber(value: string | number) {
   return typeof value === "number" ? value : Number(value);
 }
 
-function compareDates(a: string | null, b: string | null, desc = false) {
+export function compareDates(a: string | null, b: string | null, desc = false) {
   const av = a ? Date.parse(a) : null;
   const bv = b ? Date.parse(b) : null;
   if (av === null && bv === null) {
@@ -119,7 +121,7 @@ function compareDates(a: string | null, b: string | null, desc = false) {
   return desc ? bv - av : av - bv;
 }
 
-function sortTasks(tasks: Task[], sortMode: SortLabel) {
+export function sortTasks(tasks: Task[], sortMode: SortLabel) {
   const list = [...tasks];
   list.sort((a, b) => {
     switch (sortMode) {
@@ -158,7 +160,7 @@ function sortTasks(tasks: Task[], sortMode: SortLabel) {
   return list;
 }
 
-function extractErrorMessage(error: unknown) {
+export function extractErrorMessage(error: unknown) {
   if (!error) {
     return "";
   }
@@ -184,31 +186,71 @@ function extractErrorMessage(error: unknown) {
   return entries.length ? `${defaultMessage}: ${entries.join(" | ")}` : defaultMessage;
 }
 
-function isInsufficientFundsError(error: unknown) {
+export function isInsufficientFundsError(error: unknown) {
   const message = extractErrorMessage(error).toLowerCase();
   return message.includes("insufficient funds") || message.includes("insufficient gold");
 }
 
-function filterHidden(task: Task, hiddenOnly: boolean) {
+export function filterHidden(task: Task, hiddenOnly: boolean) {
   return hiddenOnly ? task.is_hidden : !task.is_hidden;
 }
 
-function includesQuery(task: Task, query: string) {
+export function includesQuery(task: Task, query: string) {
   return !query || task.title.toLowerCase().includes(query.toLowerCase());
 }
 
-function matchesSelectedTags(task: Task, selectedTagIds: string[]) {
+export function matchesSelectedTags(task: Task, selectedTagIds: string[]) {
   if (!selectedTagIds.length) {
     return true;
   }
   return selectedTagIds.some((tagId) => task.tag_ids.includes(tagId));
 }
 
-function isDailyCompletedForToday(task: Task) {
-  return task.last_completion_period === localDateString();
+export function currentDailyPeriodStart(task: Task) {
+  const cadence = task.repeat_cadence;
+  const every = Math.max(1, task.repeat_every || 1);
+  const now = new Date();
+  now.setHours(0, 0, 0, 0);
+  const anchor = new Date(task.created_at);
+  anchor.setHours(0, 0, 0, 0);
+
+  if (cadence === "day") {
+    const dayMs = 24 * 60 * 60 * 1000;
+    const diffDays = Math.max(0, Math.floor((now.getTime() - anchor.getTime()) / dayMs));
+    return addDays(anchor, Math.floor(diffDays / every) * every);
+  }
+  if (cadence === "week") {
+    const nowStart = startOfWeekMonday(now);
+    const anchorStart = startOfWeekMonday(anchor);
+    const dayMs = 24 * 60 * 60 * 1000;
+    const weeksDiff = Math.max(0, Math.floor((nowStart.getTime() - anchorStart.getTime()) / dayMs / 7));
+    return addDays(anchorStart, Math.floor(weeksDiff / every) * every * 7);
+  }
+  if (cadence === "month") {
+    const nowMonthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+    const anchorMonthStart = new Date(anchor.getFullYear(), anchor.getMonth(), 1);
+    const monthsDiff =
+      Math.max(0, (nowMonthStart.getFullYear() - anchorMonthStart.getFullYear()) * 12 + (nowMonthStart.getMonth() - anchorMonthStart.getMonth()));
+    return addMonths(anchorMonthStart, Math.floor(monthsDiff / every) * every);
+  }
+  if (cadence === "year") {
+    const nowYearStart = new Date(now.getFullYear(), 0, 1);
+    const anchorYearStart = new Date(anchor.getFullYear(), 0, 1);
+    const yearsDiff = Math.max(0, nowYearStart.getFullYear() - anchorYearStart.getFullYear());
+    return addYears(anchorYearStart, Math.floor(yearsDiff / every) * every);
+  }
+  return now;
 }
 
-function startOfWeekMonday(date: Date) {
+export function isDailyCompletedForCurrentPeriod(task: Task) {
+  const currentStart = currentDailyPeriodStart(task);
+  const year = currentStart.getFullYear();
+  const month = String(currentStart.getMonth() + 1).padStart(2, "0");
+  const day = String(currentStart.getDate()).padStart(2, "0");
+  return task.last_completion_period === `${year}-${month}-${day}`;
+}
+
+export function startOfWeekMonday(date: Date) {
   const copy = new Date(date);
   const day = copy.getDay();
   const diff = day === 0 ? -6 : 1 - day;
@@ -217,21 +259,21 @@ function startOfWeekMonday(date: Date) {
   return copy;
 }
 
-function addDays(date: Date, days: number) {
+export function addDays(date: Date, days: number) {
   const copy = new Date(date);
   copy.setDate(copy.getDate() + days);
   return copy;
 }
 
-function addMonths(date: Date, months: number) {
+export function addMonths(date: Date, months: number) {
   return new Date(date.getFullYear(), date.getMonth() + months, 1);
 }
 
-function addYears(date: Date, years: number) {
+export function addYears(date: Date, years: number) {
   return new Date(date.getFullYear() + years, 0, 1);
 }
 
-function periodEndForDaily(task: Task) {
+export function periodEndForDaily(task: Task) {
   const cadence = task.repeat_cadence;
   const every = Math.max(1, task.repeat_every || 1);
   const now = new Date();
@@ -277,7 +319,7 @@ function periodEndForDaily(task: Task) {
   return now;
 }
 
-function formatDailyDueText(task: Task) {
+export function formatDailyDueText(task: Task) {
   const due = periodEndForDaily(task);
   return `Due ${due.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" })}`;
 }
@@ -350,6 +392,9 @@ export function TaskBoardPage() {
   const [pendingActionTaskIds, setPendingActionTaskIds] = useState<Record<string, true>>({});
   const [insufficientGoldPopup, setInsufficientGoldPopup] = useState(false);
   const [editorState, setEditorState] = useState<EditorState | null>(null);
+  const [showNewDayModal, setShowNewDayModal] = useState(false);
+  const [checkedNewDayIds, setCheckedNewDayIds] = useState<string[]>([]);
+  const [dismissedNewDaySignature, setDismissedNewDaySignature] = useState("");
 
   const tasksQuery = useQuery({
     queryKey: tasksKey,
@@ -359,6 +404,11 @@ export function TaskBoardPage() {
   const tagsQuery = useQuery({
     queryKey: ["tags", profileId, "board-filter"],
     queryFn: () => fetchTags(profileId),
+    enabled: Boolean(profileId)
+  });
+  const newDayQuery = useQuery({
+    queryKey: ["new-day", profileId],
+    queryFn: () => fetchNewDayPreview(profileId),
     enabled: Boolean(profileId)
   });
 
@@ -429,6 +479,34 @@ export function TaskBoardPage() {
     mutationFn: (taskId: string) => deleteTask(taskId, profileId),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: tasksKey })
   });
+  const startNewDayMutation = useMutation({
+    mutationFn: ({ ids }: { ids: string[] }) => startNewDay(profileId, ids),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: tasksKey });
+      await queryClient.invalidateQueries({ queryKey: ["logs", profileId] });
+      await queryClient.invalidateQueries({ queryKey: ["new-day", profileId] });
+    }
+  });
+
+  const newDayItems = newDayQuery.data?.dailies ?? [];
+  const newDaySignature = useMemo(() => newDayItems.map((item) => item.id).sort().join("|"), [newDayItems]);
+
+  useEffect(() => {
+    setShowNewDayModal(false);
+    setCheckedNewDayIds([]);
+    setDismissedNewDaySignature("");
+  }, [profileId]);
+
+  useEffect(() => {
+    if (!newDayItems.length) {
+      return;
+    }
+    if (dismissedNewDaySignature && dismissedNewDaySignature === newDaySignature) {
+      return;
+    }
+    setShowNewDayModal(true);
+    setCheckedNewDayIds([]);
+  }, [newDayItems, newDaySignature, dismissedNewDaySignature]);
 
   const tasks = tasksQuery.data ?? [];
   const grouped = useMemo(
@@ -459,7 +537,7 @@ export function TaskBoardPage() {
       if (dailyFilter === "all" || dailyFilter === "hidden") {
         return true;
       }
-      const done = isDailyCompletedForToday(t);
+      const done = isDailyCompletedForCurrentPeriod(t);
       return dailyFilter === "due" ? !done : done;
     });
     return sortTasks(filtered, dailySort);
@@ -682,6 +760,33 @@ export function TaskBoardPage() {
     return <div className="status error">Failed to load tasks for this profile. {extractErrorMessage(tasksQuery.error)}</div>;
   }
 
+  const closeNewDayModal = () => {
+    setShowNewDayModal(false);
+    setDismissedNewDaySignature(newDaySignature);
+  };
+
+  const toggleNewDayItem = (itemId: string) => {
+    setCheckedNewDayIds((current) => (current.includes(itemId) ? current.filter((id) => id !== itemId) : [...current, itemId]));
+  };
+
+  const checkAllNewDayItems = () => {
+    setCheckedNewDayIds(newDayItems.map((item) => item.id));
+  };
+
+  const uncheckAllNewDayItems = () => {
+    setCheckedNewDayIds([]);
+  };
+
+  const formatPreviousPeriod = (item: NewDayPreviewItem) => {
+    const parsed = new Date(`${item.previous_period_start}T00:00:00`);
+    return parsed.toLocaleDateString();
+  };
+
+  const handleStartNewDay = async () => {
+    await startNewDayMutation.mutateAsync({ ids: checkedNewDayIds });
+    closeNewDayModal();
+  };
+
   return (
     <div className="board-layout">
       <div className="board-toolbar">
@@ -714,6 +819,49 @@ export function TaskBoardPage() {
 
       {insufficientGoldPopup && <div className="mini-popup">Insufficient gold to claim this reward.</div>}
       {mutationError && <div className="status error">{mutationError}</div>}
+      {startNewDayMutation.error && <div className="status error">{extractErrorMessage(startNewDayMutation.error)}</div>}
+
+      {showNewDayModal && (
+        <div className="modal-backdrop" onClick={closeNewDayModal}>
+          <div className="modal-card" onClick={(event) => event.stopPropagation()}>
+            <div className="modal-header">
+              <h2>New Day</h2>
+              <button type="button" className="ghost-button" onClick={closeNewDayModal}>
+                Close
+              </button>
+            </div>
+            <p className="task-meta">You have unchecked dailies from the previous period. Check them off to maintain streaks.</p>
+            <div className="modal-actions" style={{ justifyContent: "flex-start" }}>
+              <button type="button" className="action-button" onClick={checkAllNewDayItems}>
+                Check all
+              </button>
+              <button type="button" className="ghost-button" onClick={uncheckAllNewDayItems}>
+                Uncheck all
+              </button>
+            </div>
+            <ul className="nested-list">
+              {newDayItems.map((item) => (
+                <li key={item.id}>
+                  <label className="checkbox-row">
+                    <input
+                      type="checkbox"
+                      checked={checkedNewDayIds.includes(item.id)}
+                      onChange={() => toggleNewDayItem(item.id)}
+                    />
+                    <span>{item.title}</span>
+                  </label>
+                  <span className="task-meta">Previous period: {formatPreviousPeriod(item)}</span>
+                </li>
+              ))}
+            </ul>
+            <div className="modal-actions">
+              <button type="button" className="action-button" onClick={() => void handleStartNewDay()}>
+                Start New Day
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="task-columns">
         <section className="task-column">
@@ -786,7 +934,7 @@ export function TaskBoardPage() {
           </div>
           <ul className="task-list">
             {visibleDailies.map((task) => {
-              const done = isDailyCompletedForToday(task);
+              const done = isDailyCompletedForCurrentPeriod(task);
               return (
                 <li key={task.id} className="clickable-card" onClick={() => setEditorState({ mode: "edit", task })}>
                   {renderCardMenu(task)}

@@ -21,6 +21,15 @@ ENV/
 .env
 .env.*
 !.env.example
+!.env.*.example
+.envrc
+*.pem
+*.key
+*.crt
+*.p12
+*.pfx
+*.secrets
+secrets.*
 
 # Django stuff
 *.log
@@ -34,11 +43,18 @@ staticfiles/
 .coverage.*
 htmlcov/
 .pytest_cache/
+coverage/
+*.lcov
+playwright-report/
+test-results/
+blob-report/
+frontend/test-results/
 
 # Type checker / linters
 .mypy_cache/
 .ruff_cache/
 .pyre/
+*.tsbuildinfo
 
 # IDE/editor
 .idea/

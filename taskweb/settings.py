@@ -11,6 +11,7 @@ https://docs.djangoproject.com/en/5.2/ref/settings/
 """
 
 import os
+import sys
 from pathlib import Path
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
@@ -105,6 +106,15 @@ DATABASES = {
      'PORT': '5432',
   }
 }
+
+# Local test fallback:
+# If running Django tests and TASKWEB_TEST_USE_SQLITE is not explicitly disabled,
+# use SQLite so tests do not require Postgres CREATEDB privilege.
+if "test" in sys.argv and os.environ.get("TASKWEB_TEST_USE_SQLITE", "1") == "1":
+    DATABASES["default"] = {
+        "ENGINE": "django.db.backends.sqlite3",
+        "NAME": BASE_DIR / ".test.sqlite3",
+    }
 
 
 

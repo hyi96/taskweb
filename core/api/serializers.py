@@ -285,3 +285,27 @@ class ActivityDurationSerializer(serializers.Serializer):
     task_id = serializers.UUIDField(required=False, allow_null=True)
     reward_id = serializers.UUIDField(required=False, allow_null=True)
     timestamp = serializers.DateTimeField(required=False, default=timezone.now)
+
+
+class NewDayPreviewItemSerializer(serializers.Serializer):
+    id = serializers.UUIDField()
+    title = serializers.CharField()
+    previous_period_start = serializers.DateField()
+    last_completion_period = serializers.DateField(allow_null=True)
+    repeat_cadence = serializers.CharField(allow_null=True)
+    repeat_every = serializers.IntegerField()
+
+
+class NewDayPreviewSerializer(serializers.Serializer):
+    profile_id = serializers.UUIDField()
+    dailies = NewDayPreviewItemSerializer(many=True)
+
+
+class NewDayStartSerializer(serializers.Serializer):
+    profile_id = serializers.UUIDField()
+    checked_daily_ids = serializers.ListField(
+        child=serializers.UUIDField(),
+        required=False,
+        default=list,
+        allow_empty=True,
+    )

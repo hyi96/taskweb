@@ -3,7 +3,7 @@ import { useState } from "react";
 import { fetchLogs } from "../../shared/api/logs";
 import { useProfileContext } from "../profiles/ProfileContext";
 
-function formatDuration(duration: string | null) {
+export function formatDuration(duration: string | null) {
   if (!duration) {
     return "00:00:00";
   }
@@ -15,18 +15,18 @@ function formatDuration(duration: string | null) {
   return duration;
 }
 
-function formatGoldDelta(value: string) {
+export function formatGoldDelta(value: string) {
   return value.startsWith("-") ? value : `+${value}`;
 }
 
-function formatDateInputValue(date: Date) {
+export function formatDateInputValue(date: Date) {
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, "0");
   const day = String(date.getDate()).padStart(2, "0");
   return `${year}-${month}-${day}`;
 }
 
-function formatLogLine(log: {
+export function formatLogLine(log: {
   type: string;
   timestamp: string;
   title_snapshot: string;
