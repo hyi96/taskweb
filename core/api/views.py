@@ -1,14 +1,30 @@
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.shortcuts import get_object_or_404
-from rest_framework import status, viewsets
+from rest_framework import mixins, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.exceptions import ValidationError
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
-from core.api.serializers import ActionSerializer, TaskCreateUpdateSerializer, TaskSerializer
-from core.models import Profile, Task
-from core.services.task_actions import daily_complete, habit_increment, reward_claim, todo_complete
+from core.api.serializers import (
+    ActivityDurationSerializer,
+    ActionSerializer,
+    ChecklistItemSerializer,
+    LogEntrySerializer,
+    ProfileSerializer,
+    StreakBonusRuleSerializer,
+    TagSerializer,
+    TaskCreateUpdateSerializer,
+    TaskSerializer,
+)
+from core.models import ChecklistItem, LogEntry, Profile, StreakBonusRule, Tag, Task
+from core.services.task_actions import (
+    daily_complete,
+    habit_increment,
+    log_activity_duration,
+    reward_claim,
+    todo_complete,
+)
 
 
 def _to_drf_validation_error(exc: DjangoValidationError) -> ValidationError:
@@ -17,15 +33,146 @@ def _to_drf_validation_error(exc: DjangoValidationError) -> ValidationError:
     return ValidationError({"detail": exc.messages})
 
 
-class TaskViewSet(viewsets.ModelViewSet):
+class ProfileScopedMixin:
+    def _required_profile_id_from_query(self):
+        profile_id = self.request.query_params.get("profile_id")
+        if not profile_id:
+            raise ValidationError({"profile_id": "This query parameter is required."})
+        return profile_id
+
+    def _profile_or_404(self, profile_id):
+        return get_object_or_404(Profile.objects.filter(account=self.request.user), id=profile_id)
+
+
+class ProfileViewSet(viewsets.ModelViewSet):
+    serializer_class = ProfileSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        return Profile.objects.filter(account=self.request.user).order_by("created_at")
+
+    def perform_create(self, serializer):
+        serializer.save(account=self.request.user)
+
+
+class TagViewSet(ProfileScopedMixin, viewsets.ModelViewSet):
+    serializer_class = TagSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        queryset = Tag.objects.filter(profile__account=self.request.user).select_related("profile")
+        profile_id = self.request.query_params.get("profile_id")
+        if profile_id:
+            self._profile_or_404(profile_id)
+            queryset = queryset.filter(profile_id=profile_id)
+        elif self.action == "list":
+            queryset = queryset.none()
+        return queryset.order_by("name")
+
+    def get_serializer_context(self):
+        context = super().get_serializer_context()
+        context["request"] = self.request
+        return context
+
+
+class ChecklistItemViewSet(ProfileScopedMixin, viewsets.ModelViewSet):
+    serializer_class = ChecklistItemSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        queryset = ChecklistItem.objects.filter(task__profile__account=self.request.user).select_related("task")
+        profile_id = self.request.query_params.get("profile_id")
+        if profile_id:
+            self._profile_or_404(profile_id)
+            queryset = queryset.filter(task__profile_id=profile_id)
+        elif self.action == "list":
+            queryset = queryset.none()
+
+        task_id = self.request.query_params.get("task_id")
+        if task_id:
+            queryset = queryset.filter(task_id=task_id)
+        return queryset.order_by("task_id", "sort_order", "created_at")
+
+    def get_serializer_context(self):
+        context = super().get_serializer_context()
+        context["request"] = self.request
+        return context
+
+
+class StreakBonusRuleViewSet(ProfileScopedMixin, viewsets.ModelViewSet):
+    serializer_class = StreakBonusRuleSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        queryset = StreakBonusRule.objects.filter(task__profile__account=self.request.user).select_related("task")
+        profile_id = self.request.query_params.get("profile_id")
+        if profile_id:
+            self._profile_or_404(profile_id)
+            queryset = queryset.filter(task__profile_id=profile_id)
+        elif self.action == "list":
+            queryset = queryset.none()
+
+        task_id = self.request.query_params.get("task_id")
+        if task_id:
+            queryset = queryset.filter(task_id=task_id)
+        return queryset.order_by("task_id", "streak_goal", "created_at")
+
+    def get_serializer_context(self):
+        context = super().get_serializer_context()
+        context["request"] = self.request
+        return context
+
+
+class LogEntryViewSet(ProfileScopedMixin, viewsets.ReadOnlyModelViewSet):
+    serializer_class = LogEntrySerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        profile_id = self._required_profile_id_from_query()
+        self._profile_or_404(profile_id)
+        queryset = LogEntry.objects.filter(profile_id=profile_id, profile__account=self.request.user).order_by("-timestamp")
+
+        log_type = self.request.query_params.get("type")
+        if log_type:
+            queryset = queryset.filter(type=log_type)
+
+        task_id = self.request.query_params.get("task_id")
+        if task_id:
+            queryset = queryset.filter(task_id=task_id)
+
+        reward_id = self.request.query_params.get("reward_id")
+        if reward_id:
+            queryset = queryset.filter(reward_id=reward_id)
+
+        date_from = self.request.query_params.get("from")
+        if date_from:
+            queryset = queryset.filter(timestamp__date__gte=date_from)
+
+        date_to = self.request.query_params.get("to")
+        if date_to:
+            queryset = queryset.filter(timestamp__date__lte=date_to)
+
+        limit = self.request.query_params.get("limit")
+        if limit:
+            try:
+                value = max(1, min(int(limit), 500))
+                return queryset[:value]
+            except ValueError:
+                raise ValidationError({"limit": "limit must be an integer."}) from None
+
+        return queryset
+
+
+class TaskViewSet(ProfileScopedMixin, viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
         queryset = Task.objects.filter(profile__account=self.request.user).select_related("profile")
         profile_id = self.request.query_params.get("profile_id")
         if profile_id:
+            self._profile_or_404(profile_id)
             queryset = queryset.filter(profile_id=profile_id)
-        else:
+        elif self.action == "list":
             queryset = queryset.none()
         return queryset
 
@@ -33,15 +180,6 @@ class TaskViewSet(viewsets.ModelViewSet):
         if self.action in {"create", "update", "partial_update"}:
             return TaskCreateUpdateSerializer
         return TaskSerializer
-
-    def _profile_or_404(self, profile_id):
-        return get_object_or_404(Profile.objects.filter(account=self.request.user), id=profile_id)
-
-    def _required_profile_id_from_query(self):
-        profile_id = self.request.query_params.get("profile_id")
-        if not profile_id:
-            raise ValidationError({"profile_id": "This query parameter is required."})
-        return profile_id
 
     def _action_payload(self, request):
         payload = request.data.copy()
@@ -60,14 +198,28 @@ class TaskViewSet(viewsets.ModelViewSet):
         )
 
     def list(self, request, *args, **kwargs):
-        profile_id = self._required_profile_id_from_query()
-        self._profile_or_404(profile_id)
+        self._required_profile_id_from_query()
         return super().list(request, *args, **kwargs)
 
     def retrieve(self, request, *args, **kwargs):
-        profile_id = self._required_profile_id_from_query()
-        self._profile_or_404(profile_id)
+        self._required_profile_id_from_query()
         return super().retrieve(request, *args, **kwargs)
+
+    def create(self, request, *args, **kwargs):
+        write_serializer = self.get_serializer(data=request.data)
+        write_serializer.is_valid(raise_exception=True)
+        self.perform_create(write_serializer)
+        read_serializer = TaskSerializer(write_serializer.instance)
+        return Response(read_serializer.data, status=status.HTTP_201_CREATED)
+
+    def update(self, request, *args, **kwargs):
+        partial = kwargs.pop("partial", False)
+        instance = self.get_object()
+        write_serializer = self.get_serializer(instance, data=request.data, partial=partial)
+        write_serializer.is_valid(raise_exception=True)
+        self.perform_update(write_serializer)
+        read_serializer = TaskSerializer(write_serializer.instance)
+        return Response(read_serializer.data, status=status.HTTP_200_OK)
 
     @action(detail=True, methods=["post"], url_path="habit-increment", url_name="habit-increment")
     def habit_increment_action(self, request, pk=None):
@@ -134,3 +286,39 @@ class TaskViewSet(viewsets.ModelViewSet):
         except DjangoValidationError as exc:
             raise _to_drf_validation_error(exc) from exc
         return Response(TaskSerializer(updated_task).data, status=status.HTTP_200_OK)
+
+
+class ActivityDurationViewSet(ProfileScopedMixin, mixins.CreateModelMixin, viewsets.GenericViewSet):
+    serializer_class = ActivityDurationSerializer
+    permission_classes = [IsAuthenticated]
+    queryset = LogEntry.objects.none()
+
+    def create(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+        profile = self._profile_or_404(data["profile_id"])
+        task = None
+        reward = None
+        task_id = data.get("task_id")
+        reward_id = data.get("reward_id")
+        if task_id:
+            task = get_object_or_404(Task.objects.filter(profile=profile, profile__account=request.user), id=task_id)
+        if reward_id:
+            reward = get_object_or_404(
+                Task.objects.filter(profile=profile, profile__account=request.user, task_type=Task.TaskType.REWARD),
+                id=reward_id,
+            )
+        try:
+            entry = log_activity_duration(
+                profile=profile,
+                user=request.user,
+                duration=data["duration"],
+                title=data["title"],
+                timestamp=data["timestamp"],
+                task=task,
+                reward=reward,
+            )
+        except DjangoValidationError as exc:
+            raise _to_drf_validation_error(exc) from exc
+        return Response(LogEntrySerializer(entry).data, status=status.HTTP_201_CREATED)

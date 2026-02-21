@@ -260,3 +260,55 @@ def reward_claim(
         ],
     )
     return task
+
+
+@transaction.atomic
+def log_activity_duration(
+    *,
+    profile: Profile,
+    user,
+    duration,
+    title: str,
+    timestamp: datetime | None = None,
+    task: Task | None = None,
+    reward: Task | None = None,
+) -> LogEntry:
+    """Append an activity duration log atomically for a profile-owned session."""
+    ts = _as_aware_timestamp(timestamp)
+    locked_profile = Profile.objects.select_for_update().get(id=profile.id)
+    if locked_profile.account_id != user.id:
+        raise ValidationError({"profile_id": "Profile does not belong to the authenticated user."})
+    if duration is None or duration.total_seconds() <= 0:
+        raise ValidationError({"duration": "Duration must be greater than zero."})
+    if not title or not title.strip():
+        raise ValidationError({"title": "Title is required."})
+
+    locked_task = None
+    if task is not None:
+        locked_task = Task.objects.select_for_update().get(id=task.id)
+        if locked_task.profile_id != locked_profile.id:
+            raise ValidationError({"task_id": "Task must belong to the selected profile."})
+
+    locked_reward = None
+    if reward is not None:
+        locked_reward = Task.objects.select_for_update().get(id=reward.id)
+        if locked_reward.profile_id != locked_profile.id:
+            raise ValidationError({"reward_id": "Reward must belong to the selected profile."})
+        if locked_reward.task_type != Task.TaskType.REWARD:
+            raise ValidationError({"reward_id": "Reward id must point to a reward task."})
+
+    log = LogEntry(
+        profile=locked_profile,
+        timestamp=ts,
+        type=LogEntry.LogType.ACTIVITY_DURATION,
+        task=locked_task,
+        reward=locked_reward,
+        gold_delta=Decimal("0"),
+        user_gold=_to_cents(locked_profile.gold_balance),
+        count_delta=None,
+        duration=duration,
+        title_snapshot=title.strip(),
+    )
+    log.full_clean()
+    log.save()
+    return log

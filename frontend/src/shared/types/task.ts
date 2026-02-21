@@ -1,0 +1,33 @@
+export type TaskType = "habit" | "daily" | "todo" | "reward";
+
+export type Task = {
+  id: string;
+  profile_id: string;
+  task_type: TaskType;
+  title: string;
+  notes: string;
+  is_hidden: boolean;
+  tag_ids: string[];
+  gold_delta: string;
+  current_count: string;
+  count_increment: string;
+  count_reset_cadence: string | null;
+  repeat_cadence: string | null;
+  repeat_every: number;
+  current_streak: number;
+  best_streak: number;
+  streak_goal: number;
+  last_completion_period: string | null;
+  autocomplete_time_threshold: string | null;
+  due_at: string | null;
+  is_done: boolean;
+  completed_at: string | null;
+  is_repeatable: boolean;
+  is_claimed: boolean;
+  claimed_at: string | null;
+  claim_count: number;
+  total_actions_count: number;
+  last_action_at: string | null;
+  created_at: string;
+  updated_at: string;
+};
