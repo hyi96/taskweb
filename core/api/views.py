@@ -1,8 +1,10 @@
 from django.core.exceptions import ValidationError as DjangoValidationError
+from django.http import HttpResponse
 from django.shortcuts import get_object_or_404
 from rest_framework import mixins, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.exceptions import ValidationError
+from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
@@ -30,6 +32,7 @@ from core.services.task_actions import (
     start_new_day,
     todo_complete,
 )
+from core.services.taskapp_portability import TaskAppPortabilityService
 
 
 def _to_drf_validation_error(exc: DjangoValidationError) -> ValidationError:
@@ -52,12 +55,37 @@ class ProfileScopedMixin:
 class ProfileViewSet(viewsets.ModelViewSet):
     serializer_class = ProfileSerializer
     permission_classes = [IsAuthenticated]
+    parser_classes = [JSONParser, MultiPartParser, FormParser]
 
     def get_queryset(self):
         return Profile.objects.filter(account=self.request.user).order_by("created_at")
 
     def perform_create(self, serializer):
         serializer.save(account=self.request.user)
+
+    @action(detail=True, methods=["get"], url_path="export-taskapp", url_name="export-taskapp")
+    def export_taskapp(self, request, pk=None):
+        profile = self.get_object()
+        archive_bytes, filename = TaskAppPortabilityService.export_profile_archive(profile=profile, user=request.user)
+        response = HttpResponse(archive_bytes, content_type="application/zip")
+        response["Content-Disposition"] = f'attachment; filename="{filename}"'
+        return response
+
+    @action(detail=True, methods=["post"], url_path="import-taskapp", url_name="import-taskapp")
+    def import_taskapp(self, request, pk=None):
+        profile = self.get_object()
+        upload = request.FILES.get("file")
+        if upload is None:
+            raise ValidationError({"file": "This file field is required."})
+        try:
+            result = TaskAppPortabilityService.import_profile_archive(
+                profile=profile,
+                user=request.user,
+                archive_file=upload,
+            )
+        except DjangoValidationError as exc:
+            raise _to_drf_validation_error(exc) from exc
+        return Response(result, status=status.HTTP_200_OK)
 
 
 class TagViewSet(ProfileScopedMixin, viewsets.ModelViewSet):

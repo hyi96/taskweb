@@ -16,6 +16,8 @@ type RequestOptions = {
   profileId?: string;
   query?: Record<string, string | number | undefined>;
   body?: unknown;
+  headers?: Record<string, string>;
+  responseType?: "json" | "blob";
 };
 
 function getCookie(name: string) {
@@ -49,18 +51,29 @@ function buildUrl(path: string, query?: Record<string, string | number | undefin
 export async function apiRequest<T>(path: string, options: RequestOptions = {}): Promise<T> {
   const method = options.method ?? "GET";
   const csrfToken = getCookie("csrftoken");
+  const isFormData = typeof FormData !== "undefined" && options.body instanceof FormData;
+  const headers: Record<string, string> = {
+    ...(isFormData ? {} : { "Content-Type": "application/json" }),
+    ...(method !== "GET" && csrfToken ? { "X-CSRFToken": csrfToken } : {}),
+    ...(options.headers ?? {})
+  };
   const response = await fetch(buildUrl(path, options.query, options.profileId), {
     method,
     credentials: "include",
-    headers: {
-      "Content-Type": "application/json",
-      ...(method !== "GET" && csrfToken ? { "X-CSRFToken": csrfToken } : {})
-    },
-    body: options.body ? JSON.stringify(options.body) : undefined
+    headers,
+    body: options.body ? (isFormData ? options.body : JSON.stringify(options.body)) : undefined
   });
 
   if (response.status === 204) {
     return undefined as T;
+  }
+
+  if (options.responseType === "blob") {
+    if (!response.ok) {
+      const payload = (await response.json().catch(() => null)) as unknown;
+      throw new ApiError(`Request failed with ${response.status}`, response.status, payload);
+    }
+    return (await response.blob()) as T;
   }
 
   const payload = (await response.json().catch(() => null)) as unknown;

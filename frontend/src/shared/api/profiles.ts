@@ -29,3 +29,32 @@ export async function deleteProfile(profileId: string): Promise<void> {
     method: "DELETE"
   });
 }
+
+export type TaskAppImportResult = {
+  profile_id: string;
+  imported: {
+    tags: number;
+    tasks: number;
+    rewards: number;
+    checklist_items: number;
+    streak_bonus_rules: number;
+    logs: number;
+  };
+  metadata: Record<string, unknown>;
+};
+
+export async function exportProfileTaskApp(profileId: string): Promise<Blob> {
+  return apiRequest<Blob>(`/api/profiles/${profileId}/export-taskapp/`, {
+    method: "GET",
+    responseType: "blob"
+  });
+}
+
+export async function importProfileTaskApp(profileId: string, file: File): Promise<TaskAppImportResult> {
+  const formData = new FormData();
+  formData.append("file", file);
+  return apiRequest<TaskAppImportResult>(`/api/profiles/${profileId}/import-taskapp/`, {
+    method: "POST",
+    body: formData
+  });
+}

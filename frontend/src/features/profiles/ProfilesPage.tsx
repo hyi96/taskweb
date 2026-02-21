@@ -1,6 +1,12 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
-import { createProfile, deleteProfile } from "../../shared/api/profiles";
+import { useEffect, useRef, useState } from "react";
+import {
+  createProfile,
+  deleteProfile,
+  exportProfileTaskApp,
+  importProfileTaskApp,
+  type TaskAppImportResult
+} from "../../shared/api/profiles";
 import { useProfileContext } from "./ProfileContext";
 
 export function ProfilesPage() {
@@ -8,12 +14,25 @@ export function ProfilesPage() {
   const { profileId, setProfileId, profiles, isProfilesLoading } = useProfileContext();
   const [newName, setNewName] = useState("");
   const [error, setError] = useState("");
+  const [popupMessage, setPopupMessage] = useState("");
+  const [popupTone, setPopupTone] = useState<"error" | "success">("success");
+  const [busyProfileId, setBusyProfileId] = useState("");
+  const importInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
+
+  useEffect(() => {
+    if (!popupMessage) {
+      return;
+    }
+    const timer = window.setTimeout(() => setPopupMessage(""), 2500);
+    return () => window.clearTimeout(timer);
+  }, [popupMessage]);
 
   const createMutation = useMutation({
     mutationFn: (name: string) => createProfile(name),
     onSuccess: (created) => {
       setNewName("");
       setError("");
+      setPopupMessage("");
       void queryClient.invalidateQueries({ queryKey: ["profiles"] });
       setProfileId(created.id);
     }
@@ -23,6 +42,7 @@ export function ProfilesPage() {
     mutationFn: (id: string) => deleteProfile(id),
     onSuccess: (_, deletedId) => {
       setError("");
+      setPopupMessage("");
       const remaining = profiles.filter((p) => p.id !== deletedId);
       if (profileId === deletedId) {
         setProfileId(remaining[0]?.id ?? "");
@@ -32,6 +52,59 @@ export function ProfilesPage() {
       void queryClient.invalidateQueries({ queryKey: ["logs"] });
     }
   });
+
+  const downloadArchive = async (profileIdForExport: string, profileName: string) => {
+    try {
+      setBusyProfileId(profileIdForExport);
+      const blob = await exportProfileTaskApp(profileIdForExport);
+      const url = window.URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = `${profileName.replace(/\s+/g, "_")}.taskapp`;
+      document.body.append(anchor);
+      anchor.click();
+      anchor.remove();
+      window.URL.revokeObjectURL(url);
+      setError("");
+      setPopupTone("success");
+      setPopupMessage(`Exported ${profileName} successfully.`);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Failed to export profile.";
+      setError(message);
+      setPopupTone("error");
+      setPopupMessage(message);
+    } finally {
+      setBusyProfileId("");
+    }
+  };
+
+  const uploadArchive = async (profileIdForImport: string, file: File | null) => {
+    if (!file) {
+      return;
+    }
+    try {
+      setBusyProfileId(profileIdForImport);
+      const result = await importProfileTaskApp(profileIdForImport, file);
+      setError("");
+      setPopupTone("success");
+      setPopupMessage(formatImportSummary(result));
+      await queryClient.invalidateQueries({ queryKey: ["profiles"] });
+      await queryClient.invalidateQueries({ queryKey: ["tasks"] });
+      await queryClient.invalidateQueries({ queryKey: ["tags"] });
+      await queryClient.invalidateQueries({ queryKey: ["logs"] });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Failed to import profile archive.";
+      setError(message);
+      setPopupTone("error");
+      setPopupMessage(message);
+    } finally {
+      setBusyProfileId("");
+      const input = importInputRefs.current[profileIdForImport];
+      if (input) {
+        input.value = "";
+      }
+    }
+  };
 
   return (
     <div className="board-layout">
@@ -59,6 +132,7 @@ export function ProfilesPage() {
 
       {isProfilesLoading && <div className="status info">Loading profiles...</div>}
       {error && <div className="status error">{error}</div>}
+      {popupMessage && <div className={`mini-popup ${popupTone}`}>{popupMessage}</div>}
 
       <ul className="task-list">
         {profiles.map((profile) => (
@@ -69,10 +143,38 @@ export function ProfilesPage() {
             </div>
             <div className="tag-actions">
               {profileId === profile.id ? <span className="task-meta">Active</span> : null}
+              <input
+                ref={(element) => {
+                  importInputRefs.current[profile.id] = element;
+                }}
+                type="file"
+                accept=".taskapp,.zip"
+                style={{ display: "none" }}
+                onChange={(event) => {
+                  const file = event.target.files?.[0] ?? null;
+                  void uploadArchive(profile.id, file);
+                }}
+              />
+              <button
+                type="button"
+                className="ghost-button"
+                disabled={busyProfileId === profile.id}
+                onClick={() => void downloadArchive(profile.id, profile.name)}
+              >
+                Export
+              </button>
+              <button
+                type="button"
+                className="ghost-button"
+                disabled={busyProfileId === profile.id}
+                onClick={() => importInputRefs.current[profile.id]?.click()}
+              >
+                Import
+              </button>
               <button
                 type="button"
                 className="danger-button"
-                disabled={deleteMutation.isPending}
+                disabled={deleteMutation.isPending || busyProfileId === profile.id}
                 onClick={() => {
                   if (!window.confirm(`Delete profile "${profile.name}"? This will remove its data.`)) {
                     return;
@@ -93,4 +195,15 @@ export function ProfilesPage() {
       </ul>
     </div>
   );
+}
+
+function formatImportSummary(result: TaskAppImportResult): string {
+  const imported = result.imported;
+  return [
+    "Import complete:",
+    `${imported.tasks} tasks`,
+    `${imported.rewards} rewards`,
+    `${imported.logs} logs`,
+    `(${imported.logs_skipped} skipped)`
+  ].join(" ");
 }
