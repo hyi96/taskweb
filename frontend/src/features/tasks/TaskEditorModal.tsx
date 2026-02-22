@@ -45,17 +45,47 @@ function toDatetimeLocal(value: string | null) {
     return "";
   }
   const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return "";
+  }
   const pad = (n: number) => String(n).padStart(2, "0");
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(
-    date.getMinutes()
-  )}`;
+  return `${date.getUTCFullYear()}-${pad(date.getUTCMonth() + 1)}-${pad(date.getUTCDate())}T${pad(
+    date.getUTCHours()
+  )}:${pad(date.getUTCMinutes())}`;
 }
 
-function fromDatetimeLocal(value: string) {
-  if (!value.trim()) {
+function toIsoUtcFromDatetimeLocal(value: string) {
+  const match = value.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/);
+  if (!match) {
     return null;
   }
-  return new Date(value).toISOString();
+  const [, y, m, d, hh, mm] = match;
+  const year = Number(y);
+  const month = Number(m) - 1;
+  const day = Number(d);
+  const hour = Number(hh);
+  const minute = Number(mm);
+  return new Date(Date.UTC(year, month, day, hour, minute, 0, 0)).toISOString();
+}
+
+function toTodoDueParts(value: string | null) {
+  const local = toDatetimeLocal(value);
+  if (!local) {
+    return { datePart: "", timePart: "23:59" };
+  }
+  const [datePart, timePart] = local.split("T");
+  return {
+    datePart: datePart ?? "",
+    timePart: (timePart ?? "23:59").slice(0, 5) || "23:59",
+  };
+}
+
+function toDueAtIso(datePart: string, timePart: string) {
+  if (!datePart.trim()) {
+    return null;
+  }
+  const safeTime = /^\d{2}:\d{2}$/.test(timePart) ? timePart : "23:59";
+  return toIsoUtcFromDatetimeLocal(`${datePart}T${safeTime}`);
 }
 
 function formatLastAction(task: Task | null) {
@@ -101,7 +131,9 @@ export function TaskEditorModal({ profileId, task, onClose, onSubmit, onDelete }
   const [repeatCadence, setRepeatCadence] = useState(task?.repeat_cadence ?? "day");
   const [repeatEvery, setRepeatEvery] = useState(task?.repeat_every ?? 1);
   const [autocompleteThreshold, setAutocompleteThreshold] = useState(task?.autocomplete_time_threshold ?? "");
-  const [dueAt, setDueAt] = useState(toDatetimeLocal(task?.due_at ?? null));
+  const initialTodoDue = toTodoDueParts(task?.due_at ?? null);
+  const [dueDate, setDueDate] = useState(initialTodoDue.datePart);
+  const [dueTime, setDueTime] = useState(initialTodoDue.timePart || "23:59");
   const [isRepeatable, setIsRepeatable] = useState(task?.is_repeatable ?? false);
   const [error, setError] = useState("");
   const [isSaving, setIsSaving] = useState(false);
@@ -128,7 +160,9 @@ export function TaskEditorModal({ profileId, task, onClose, onSubmit, onDelete }
     setRepeatCadence(task.repeat_cadence ?? "day");
     setRepeatEvery(task.repeat_every);
     setAutocompleteThreshold(task.autocomplete_time_threshold ?? "");
-    setDueAt(toDatetimeLocal(task.due_at));
+    const dueParts = toTodoDueParts(task.due_at);
+    setDueDate(dueParts.datePart);
+    setDueTime(dueParts.timePart || "23:59");
     setIsRepeatable(task.is_repeatable);
     setSelectedTagIds(task.tag_ids ?? []);
   }, [task]);
@@ -138,6 +172,17 @@ export function TaskEditorModal({ profileId, task, onClose, onSubmit, onDelete }
       setSelectedTagIds([]);
     }
   }, [task]);
+
+  useEffect(() => {
+    if (isEdit) {
+      return;
+    }
+    if (taskType === "todo") {
+      if (!dueTime) {
+        setDueTime("23:59");
+      }
+    }
+  }, [isEdit, taskType, dueDate, dueTime]);
 
   useEffect(() => {
     const loadTags = async () => {
@@ -247,7 +292,7 @@ export function TaskEditorModal({ profileId, task, onClose, onSubmit, onDelete }
     }
 
     if (taskType === "todo") {
-      payload.due_at = fromDatetimeLocal(dueAt);
+      payload.due_at = toDueAtIso(dueDate, dueTime);
       payload.checklist_items = checklistDraft
         .filter((item) => item.text.trim())
         .map((item, index) => ({
@@ -480,8 +525,12 @@ export function TaskEditorModal({ profileId, task, onClose, onSubmit, onDelete }
           {taskType === "todo" && (
             <>
               <label>
-                Due at
-                <input type="datetime-local" value={dueAt} onChange={(event) => setDueAt(event.target.value)} />
+                Due date
+                <input type="date" value={dueDate} onChange={(event) => setDueDate(event.target.value)} />
+              </label>
+              <label>
+                Due time
+                <input type="time" value={dueTime} onChange={(event) => setDueTime(event.target.value)} />
               </label>
               <div className="full-width nested-box">
                 <strong>Checklist</strong>

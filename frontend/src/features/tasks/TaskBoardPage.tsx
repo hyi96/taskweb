@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { ApiError } from "../../shared/api/client";
 import { replaceChecklistItems } from "../../shared/api/checklist";
 import { fetchNewDayPreview, startNewDay } from "../../shared/api/newDay";
@@ -100,6 +100,24 @@ export function localDateString() {
   const month = String(now.getMonth() + 1).padStart(2, "0");
   const day = String(now.getDate()).padStart(2, "0");
   return `${year}-${month}-${day}`;
+}
+
+function newDaySeenStorageKey(profileId: string, day: string) {
+  return `taskweb.new_day_seen.${profileId}.${day}`;
+}
+
+function hasSeenNewDayModalToday(profileId: string) {
+  if (typeof window === "undefined" || !profileId) {
+    return false;
+  }
+  return window.localStorage.getItem(newDaySeenStorageKey(profileId, localDateString())) === "1";
+}
+
+function markNewDayModalSeenToday(profileId: string) {
+  if (typeof window === "undefined" || !profileId) {
+    return;
+  }
+  window.localStorage.setItem(newDaySeenStorageKey(profileId, localDateString()), "1");
 }
 
 export function toNumber(value: string | number) {
@@ -324,6 +342,13 @@ export function formatDailyDueText(task: Task) {
   return `Due ${due.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" })}`;
 }
 
+export function formatTodoDueText(dueAt: string) {
+  const due = new Date(dueAt);
+  const dateLabel = due.toLocaleDateString(undefined, { month: "short", day: "numeric", timeZone: "UTC" });
+  const timeLabel = due.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit", timeZone: "UTC" });
+  return `Due ${dateLabel} ${timeLabel}`;
+}
+
 function TaskColumnHeader({
   title,
   count,
@@ -394,7 +419,7 @@ export function TaskBoardPage() {
   const [editorState, setEditorState] = useState<EditorState | null>(null);
   const [showNewDayModal, setShowNewDayModal] = useState(false);
   const [checkedNewDayIds, setCheckedNewDayIds] = useState<string[]>([]);
-  const [dismissedNewDaySignature, setDismissedNewDaySignature] = useState("");
+  const checkedNewDayIdsRef = useRef<string[]>([]);
 
   const tasksQuery = useQuery({
     queryKey: tasksKey,
@@ -489,24 +514,29 @@ export function TaskBoardPage() {
   });
 
   const newDayItems = newDayQuery.data?.dailies ?? [];
-  const newDaySignature = useMemo(() => newDayItems.map((item) => item.id).sort().join("|"), [newDayItems]);
+
+  useEffect(() => {
+    checkedNewDayIdsRef.current = checkedNewDayIds;
+  }, [checkedNewDayIds]);
 
   useEffect(() => {
     setShowNewDayModal(false);
     setCheckedNewDayIds([]);
-    setDismissedNewDaySignature("");
+    checkedNewDayIdsRef.current = [];
   }, [profileId]);
 
   useEffect(() => {
     if (!newDayItems.length) {
       return;
     }
-    if (dismissedNewDaySignature && dismissedNewDaySignature === newDaySignature) {
+    if (hasSeenNewDayModalToday(profileId)) {
       return;
     }
     setShowNewDayModal(true);
     setCheckedNewDayIds([]);
-  }, [newDayItems, newDaySignature, dismissedNewDaySignature]);
+    checkedNewDayIdsRef.current = [];
+    markNewDayModalSeenToday(profileId);
+  }, [newDayItems, profileId]);
 
   const tasks = tasksQuery.data ?? [];
   const grouped = useMemo(
@@ -762,18 +792,25 @@ export function TaskBoardPage() {
 
   const closeNewDayModal = () => {
     setShowNewDayModal(false);
-    setDismissedNewDaySignature(newDaySignature);
+    markNewDayModalSeenToday(profileId);
   };
 
   const toggleNewDayItem = (itemId: string) => {
-    setCheckedNewDayIds((current) => (current.includes(itemId) ? current.filter((id) => id !== itemId) : [...current, itemId]));
+    setCheckedNewDayIds((current) => {
+      const next = current.includes(itemId) ? current.filter((id) => id !== itemId) : [...current, itemId];
+      checkedNewDayIdsRef.current = next;
+      return next;
+    });
   };
 
   const checkAllNewDayItems = () => {
-    setCheckedNewDayIds(newDayItems.map((item) => item.id));
+    const next = newDayItems.map((item) => item.id);
+    checkedNewDayIdsRef.current = next;
+    setCheckedNewDayIds(next);
   };
 
   const uncheckAllNewDayItems = () => {
+    checkedNewDayIdsRef.current = [];
     setCheckedNewDayIds([]);
   };
 
@@ -783,7 +820,12 @@ export function TaskBoardPage() {
   };
 
   const handleStartNewDay = async () => {
-    await startNewDayMutation.mutateAsync({ ids: checkedNewDayIds });
+    const ids = [...checkedNewDayIdsRef.current];
+    await startNewDayMutation.mutateAsync({ ids });
+    setShowNewDayModal(false);
+    setCheckedNewDayIds([]);
+    checkedNewDayIdsRef.current = [];
+    markNewDayModalSeenToday(profileId);
     closeNewDayModal();
   };
 
@@ -855,7 +897,12 @@ export function TaskBoardPage() {
               ))}
             </ul>
             <div className="modal-actions">
-              <button type="button" className="action-button" onClick={() => void handleStartNewDay()}>
+              <button
+                type="button"
+                className="action-button"
+                disabled={startNewDayMutation.isPending}
+                onClick={() => void handleStartNewDay()}
+              >
                 Start New Day
               </button>
             </div>
@@ -986,7 +1033,7 @@ export function TaskBoardPage() {
               <li key={task.id} className="clickable-card" onClick={() => setEditorState({ mode: "edit", task })}>
                 {renderCardMenu(task)}
                 <strong>{task.title}</strong>
-                {task.due_at && <span className="task-meta">Due {new Date(task.due_at).toLocaleDateString()}</span>}
+                {task.due_at && <span className="task-meta">{formatTodoDueText(task.due_at)}</span>}
                 <button
                   className="action-button"
                   type="button"
