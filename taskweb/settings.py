@@ -41,12 +41,15 @@ _load_dotenv(BASE_DIR / ".env")
 SECRET_KEY = 'django-insecure-+9q!4*t*102y#s!a9dm98x-a)v2+6iiokrq!)+9627d$k_124@'
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = os.environ.get("DJANGO_DEBUG", "1") == "1"
 
-ALLOWED_HOSTS = []
+_default_hosts = ["127.0.0.1", "localhost"]
+ALLOWED_HOSTS = [host.strip() for host in os.environ.get("ALLOWED_HOSTS", ",".join(_default_hosts)).split(",") if host.strip()]
+_default_csrf = ["http://127.0.0.1:5173", "http://localhost:5173"]
 CSRF_TRUSTED_ORIGINS = [
-    "http://127.0.0.1:5173",
-    "http://localhost:5173",
+    origin.strip()
+    for origin in os.environ.get("CSRF_TRUSTED_ORIGINS", ",".join(_default_csrf)).split(",")
+    if origin.strip()
 ]
 
 
@@ -59,12 +62,23 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    "corsheaders",
     "rest_framework",
     "core",
 ]
 
+REST_FRAMEWORK = {
+    "DEFAULT_AUTHENTICATION_CLASSES": [
+        "rest_framework.authentication.SessionAuthentication",
+    ],
+    "DEFAULT_PERMISSION_CLASSES": [
+        "rest_framework.permissions.IsAuthenticated",
+    ],
+}
+
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
+    "corsheaders.middleware.CorsMiddleware",
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
@@ -72,6 +86,14 @@ MIDDLEWARE = [
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
+
+_default_cors = ["http://127.0.0.1:5173", "http://localhost:5173"]
+CORS_ALLOWED_ORIGINS = [
+    origin.strip()
+    for origin in os.environ.get("CORS_ALLOWED_ORIGINS", ",".join(_default_cors)).split(",")
+    if origin.strip()
+]
+CORS_ALLOW_CREDENTIALS = True
 
 ROOT_URLCONF = 'taskweb.urls'
 
@@ -99,11 +121,11 @@ WSGI_APPLICATION = 'taskweb.wsgi.application'
 DATABASES = {
   'default': {
      'ENGINE': 'django.db.backends.postgresql',
-     'NAME': 'taskweb',
+     'NAME': os.environ.get("DB_NAME", "taskweb"),
      'USER': os.environ.get("DB_USER", ""),
      'PASSWORD': os.environ.get("DB_PASSWORD", ""),
-     'HOST': 'localhost',
-     'PORT': '5432',
+     'HOST': os.environ.get("DB_HOST", "localhost"),
+     'PORT': os.environ.get("DB_PORT", "5432"),
   }
 }
 

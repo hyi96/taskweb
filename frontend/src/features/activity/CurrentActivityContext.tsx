@@ -1,7 +1,7 @@
 import { useQueryClient } from "@tanstack/react-query";
 import type { PropsWithChildren } from "react";
 import { createContext, useContext, useEffect, useRef, useState } from "react";
-import { createActivityDurationLog, queueActivityDurationLog } from "../../shared/api/activity";
+import { createActivityDurationLog, queueActivityDurationLog } from "../../shared/repositories/client";
 import { useProfileContext } from "../profiles/ProfileContext";
 
 type CurrentActivityTarget = {

@@ -1,8 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { ApiError } from "../../shared/api/client";
-import { fetchChecklistItems } from "../../shared/api/checklist";
-import { fetchStreakRules } from "../../shared/api/streakRules";
-import { fetchTags } from "../../shared/api/tags";
+import { fetchChecklistItems, fetchStreakRules, fetchTags } from "../../shared/repositories/client";
 import type { Tag } from "../../shared/types/tag";
 import type { Task, TaskType } from "../../shared/types/task";
 

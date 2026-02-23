@@ -39,6 +39,7 @@ export type TaskAppImportResult = {
     checklist_items: number;
     streak_bonus_rules: number;
     logs: number;
+    logs_skipped: number;
   };
   metadata: Record<string, unknown>;
 };

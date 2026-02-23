@@ -249,6 +249,10 @@ def get_uncompleted_dailies_from_previous_period(*, profile: Profile, user, time
             cadence=daily.repeat_cadence or Task.Cadence.DAY,
             repeat_every=daily.repeat_every,
         )
+        created_local_date = timezone.localtime(daily.created_at).date()
+        # New tasks must not be considered "missed" for periods before they existed.
+        if created_local_date > previous_period:
+            continue
         # If task is already completed in the current period, do not prompt
         # "new day" backfill for the previous period.
         if daily.last_completion_period == current_period:
@@ -296,6 +300,9 @@ def start_new_day(
             cadence=daily.repeat_cadence or Task.Cadence.DAY,
             repeat_every=daily.repeat_every,
         )
+        created_local_date = timezone.localtime(daily.created_at).date()
+        if created_local_date > previous_period:
+            continue
         # Never overwrite a completion already recorded in current period.
         if daily.last_completion_period == current_period:
             continue

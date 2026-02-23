@@ -248,6 +248,32 @@ class TestTaskActionsService(TestCase):
         daily.refresh_from_db()
         self.assertEqual(daily.last_completion_period, date(2026, 2, 21))
 
+    def test_new_day_preview_skips_daily_created_in_current_period(self):
+        daily = Task.objects.create(
+            profile=self.profile,
+            task_type=Task.TaskType.DAILY,
+            title="Brand new daily",
+            repeat_cadence=Task.Cadence.DAY,
+            repeat_every=1,
+            gold_delta=Decimal("1.00"),
+        )
+        Task.objects.filter(id=daily.id).update(created_at=timezone.make_aware(timezone.datetime(2026, 2, 21, 8, 0, 0)))
+
+        preview = get_uncompleted_dailies_from_previous_period(
+            profile=self.profile,
+            user=self.user,
+            timestamp=timezone.make_aware(timezone.datetime(2026, 2, 21, 12, 0, 0)),
+        )
+        self.assertEqual(preview, [])
+
+        result = start_new_day(
+            profile=self.profile,
+            user=self.user,
+            checked_daily_ids=[daily.id],
+            timestamp=timezone.make_aware(timezone.datetime(2026, 2, 21, 12, 0, 0)),
+        )
+        self.assertEqual(result["updated_count"], 0)
+
     def test_todo_complete_marks_done_once_and_logs_balance_consistency(self):
         task = Task.objects.create(
             profile=self.profile,

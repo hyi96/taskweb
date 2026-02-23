@@ -9,7 +9,7 @@ vi.mock("../../../features/profiles/ProfileContext", () => ({
   useProfileContext: () => ({ profileId: "11111111-1111-1111-1111-111111111111" })
 }));
 
-vi.mock("../../../shared/api/logs", () => ({
+vi.mock("../../../shared/repositories/client", () => ({
   fetchLogs: (...args: unknown[]) => fetchLogsMock(...args)
 }));
 

@@ -1,7 +1,6 @@
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { fetchLogs } from "../../shared/api/logs";
-import { fetchTasks } from "../../shared/api/tasks";
+import { fetchLogs, fetchTasks } from "../../shared/repositories/client";
 import type { LogEntry } from "../../shared/types/log";
 import type { Task } from "../../shared/types/task";
 import { useProfileContext } from "../profiles/ProfileContext";

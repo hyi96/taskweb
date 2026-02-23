@@ -11,7 +11,7 @@ vi.mock("../../../features/profiles/ProfileContext", () => ({
   useProfileContext: () => ({ profileId: mockedProfileId })
 }));
 
-vi.mock("../../../shared/api/activity", () => ({
+vi.mock("../../../shared/repositories/client", () => ({
   createActivityDurationLog: (...args: unknown[]) => createActivityDurationLogMock(...args),
   queueActivityDurationLog: vi.fn()
 }));

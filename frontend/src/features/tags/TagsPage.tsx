@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
-import { createTag, deleteTag, fetchTags, updateTag } from "../../shared/api/tags";
+import { createTag, deleteTag, fetchTags, updateTag } from "../../shared/repositories/client";
 import { useProfileContext } from "../profiles/ProfileContext";
 
 export function TagsPage() {

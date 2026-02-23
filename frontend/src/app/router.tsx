@@ -1,4 +1,6 @@
 import { Navigate, Route, Routes } from "react-router-dom";
+import { useAuthContext } from "../features/auth/AuthContext";
+import { LoginPage } from "../features/auth/LoginPage";
 import { GraphsPage } from "../features/graphs/GraphsPage";
 import { LogsPage } from "../features/logs/LogsPage";
 import { ProfilesPage } from "../features/profiles/ProfilesPage";
@@ -7,6 +9,16 @@ import { TagsPage } from "../features/tags/TagsPage";
 import { AppShell } from "./shell";
 
 export function AppRouter() {
+  const { isCloudMode, isAuthenticated, isAuthLoading } = useAuthContext();
+
+  if (isCloudMode && isAuthLoading) {
+    return <div className="status info">Checking session...</div>;
+  }
+
+  if (isCloudMode && !isAuthenticated) {
+    return <LoginPage />;
+  }
+
   return (
     <AppShell>
       <Routes>

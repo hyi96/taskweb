@@ -1,9 +1,14 @@
 import type { PropsWithChildren } from "react";
 import { NavLink } from "react-router-dom";
 import { CurrentActivityPanel } from "../features/activity/CurrentActivityPanel";
+import { useAuthContext } from "../features/auth/AuthContext";
+import { setStorageMode, storageMode } from "../shared/repositories/client";
 import { ProfileSelector } from "../features/profiles/ProfileSelector";
 
 export function AppShell({ children }: PropsWithChildren) {
+  const { isCloudMode, username, logout } = useAuthContext();
+  const isGuestMode = storageMode === "indexeddb";
+
   return (
     <div className="app-shell">
       <header className="app-header">
@@ -22,6 +27,29 @@ export function AppShell({ children }: PropsWithChildren) {
         <div className="header-controls">
           <CurrentActivityPanel />
           <ProfileSelector />
+          {isCloudMode ? (
+            <div className="session-box">
+              <small>Signed in as {username ?? "unknown"}</small>
+              <button type="button" className="ghost-button" onClick={() => void logout()}>
+                Logout
+              </button>
+            </div>
+          ) : null}
+          {isGuestMode ? (
+            <div className="session-box">
+              <small>Guest mode (local storage)</small>
+              <button
+                type="button"
+                className="ghost-button"
+                onClick={() => {
+                  setStorageMode("api");
+                  window.location.reload();
+                }}
+              >
+                Use cloud mode
+              </button>
+            </div>
+          ) : null}
         </div>
       </header>
       <main className="app-main">{children}</main>

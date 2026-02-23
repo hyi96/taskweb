@@ -1,0 +1,42 @@
+services:
+  db:
+    image: postgres:16
+    container_name: taskweb-db-wsl
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${DB_NAME:-taskweb}
+      POSTGRES_USER: ${DB_USER:-taskweb}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-taskweb_dev_password}
+    ports:
+      - "5432:5432"
+    volumes:
+      - taskweb_db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-taskweb} -d ${DB_NAME:-taskweb}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: taskweb-web-wsl
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    env_file:
+      - .env.wsl
+    environment:
+      DB_HOST: db
+      DB_PORT: "5432"
+    ports:
+      - "8000:8000"
+    command: >
+      sh -c "python manage.py migrate &&
+             python manage.py check &&
+             gunicorn taskweb.wsgi:application --bind 0.0.0.0:8000 --workers 2"
+
+volumes:
+  taskweb_db_data:

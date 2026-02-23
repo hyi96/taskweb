@@ -5,11 +5,13 @@ import {
   deleteProfile,
   exportProfileTaskApp,
   importProfileTaskApp,
+  storageMode,
   type TaskAppImportResult
-} from "../../shared/api/profiles";
+} from "../../shared/repositories/client";
 import { useProfileContext } from "./ProfileContext";
 
 export function ProfilesPage() {
+  const isCloudMode = storageMode === "api";
   const queryClient = useQueryClient();
   const { profileId, setProfileId, profiles, isProfilesLoading } = useProfileContext();
   const [newName, setNewName] = useState("");
@@ -129,6 +131,7 @@ export function ProfilesPage() {
           Add profile
         </button>
       </div>
+      {!isCloudMode && <div className="status info">Import/export is available in cloud mode only.</div>}
 
       {isProfilesLoading && <div className="status info">Loading profiles...</div>}
       {error && <div className="status error">{error}</div>}
@@ -143,34 +146,38 @@ export function ProfilesPage() {
             </div>
             <div className="tag-actions">
               {profileId === profile.id ? <span className="task-meta">Active</span> : null}
-              <input
-                ref={(element) => {
-                  importInputRefs.current[profile.id] = element;
-                }}
-                type="file"
-                accept=".taskapp,.zip"
-                style={{ display: "none" }}
-                onChange={(event) => {
-                  const file = event.target.files?.[0] ?? null;
-                  void uploadArchive(profile.id, file);
-                }}
-              />
-              <button
-                type="button"
-                className="ghost-button"
-                disabled={busyProfileId === profile.id}
-                onClick={() => void downloadArchive(profile.id, profile.name)}
-              >
-                Export
-              </button>
-              <button
-                type="button"
-                className="ghost-button"
-                disabled={busyProfileId === profile.id}
-                onClick={() => importInputRefs.current[profile.id]?.click()}
-              >
-                Import
-              </button>
+              {isCloudMode && (
+                <>
+                  <input
+                    ref={(element) => {
+                      importInputRefs.current[profile.id] = element;
+                    }}
+                    type="file"
+                    accept=".taskapp,.zip"
+                    style={{ display: "none" }}
+                    onChange={(event) => {
+                      const file = event.target.files?.[0] ?? null;
+                      void uploadArchive(profile.id, file);
+                    }}
+                  />
+                  <button
+                    type="button"
+                    className="ghost-button"
+                    disabled={busyProfileId === profile.id}
+                    onClick={() => void downloadArchive(profile.id, profile.name)}
+                  >
+                    Export
+                  </button>
+                  <button
+                    type="button"
+                    className="ghost-button"
+                    disabled={busyProfileId === profile.id}
+                    onClick={() => importInputRefs.current[profile.id]?.click()}
+                  >
+                    Import
+                  </button>
+                </>
+              )}
               <button
                 type="button"
                 className="danger-button"

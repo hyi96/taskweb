@@ -1,153 +1,168 @@
-# Taskweb Deployment Plan: IndexedDB First, Backend Login Later
+# Taskweb Deployment Plan (IndexedDB First + Dockerized VPS Backend)
 
 ## Goal
-- Ship a locally usable version that works without backend auth by storing data in browser IndexedDB.
-- Later add backend login and sync/persistence to a VPS-hosted Django API.
-- Keep migration safe so current users do not lose data.
+- Ship an offline-first frontend using IndexedDB for local daily usage.
+- Add authenticated cloud mode backed by Django/DRF on a VPS.
+- Use Docker for backend deployment on VPS.
+- Use WSL as the primary pre-production test ground.
 
-## Scope
-- Frontend: React app supports two storage modes:
-- Local mode: IndexedDB only.
-- Cloud mode: authenticated API mode (Django + Postgres on VPS).
-- Backend: remains source for cloud mode; no breaking changes for current API consumers.
+## Deployment Strategy
+- **Phase A (Local-first):** frontend runs with IndexedDB only, no backend dependency.
+- **Phase B (Cloud-ready):** backend auth + API mode available.
+- **Phase C (Production):** Dockerized backend stack deployed to VPS, frontend served publicly.
 
-## Architecture Direction
-- Introduce a storage abstraction in frontend:
-- `TaskRepository`, `ProfileRepository`, `TagRepository`, `LogRepository`, `ActivityRepository`.
-- Provide implementations:
-- `IndexedDbRepository` (offline/local).
-- `ApiRepository` (current DRF endpoints).
-- Runtime mode switch:
-- `local` mode uses IndexedDB.
-- `cloud` mode uses API after login.
-- Optional later:
-- `hybrid` mode with sync queue/conflict resolution.
+## Environment Model
+- **Dev/Test Ground:** WSL (authoritative staging-like environment).
+- **Production:** VPS running Docker Compose.
 
-## Stage 0: Foundation (No Behavior Change)
+## Stage 0: Storage Abstraction (No Behavior Change)
 ### Tasks
-- Add repository interfaces and adapters without changing UI behavior.
-- Wrap existing API calls behind repository layer.
-- Add feature flag/config: `VITE_STORAGE_MODE=api|indexeddb`.
-- Keep default as `api` for zero regression.
+- Add repository layer in frontend (`Task/Profile/Tag/Log/Activity`).
+- Keep existing API behavior behind `ApiRepository`.
+- Add `IndexedDbRepository` shell.
+- Add runtime flag `VITE_STORAGE_MODE=api|indexeddb`.
 
 ### Acceptance
-- App behavior unchanged in `api` mode.
-- Existing tests still pass.
+- `api` mode behavior unchanged.
+- Existing test suite passes.
 
 ## Stage 1: IndexedDB Local Mode
 ### Tasks
-- Add IndexedDB schema (Dexie or idb) for:
-- profiles, tasks, tags, checklist_items, streak_bonus_rules, logs, current_activity state.
-- Implement CRUD/action operations in IndexedDB repo matching current semantics:
-- habit increment, daily complete, todo complete, reward claim, activity logging, new-day checks.
-- Preserve existing invariants at repo/service layer:
-- profile scoping, task-type constraints, gold balance consistency, log append behavior.
-- Add local import/export support (TaskApp archive) in local mode.
+- Implement IndexedDB schema (profiles, tasks, tags, checklist, streak rules, logs, current activity).
+- Implement action semantics in local repo:
+- habit increment, daily complete, todo complete, reward claim, new-day checks, activity logging.
+- Ensure parity with backend invariants:
+- tenant/profile scoping, gold balance/log consistency, task-type constraints.
+- Keep TaskApp import/export available in local mode.
 
 ### Acceptance
-- With backend unavailable, app is fully usable in browser.
-- Existing flows work: tasks, profiles, tags, logs, graphs, current activity, new day.
-- Data persists across refresh/restart in same browser profile.
+- App fully usable with backend offline.
+- Data persists across reload/browser restart.
+- Core journeys (tasks/logs/graphs/new-day/activity) work.
 
-## Stage 2: Local Deployment Packaging
+## Stage 2: WSL as Pre-Prod Test Ground
 ### Tasks
-- Build static frontend bundle for local usage:
-- `npm run build` and serve with simple static server (or packaged desktop shell later).
-- Add environment presets:
-- `VITE_STORAGE_MODE=indexeddb`
-- `VITE_API_BASE_URL` optional/empty.
-- Document local deployment:
-- run command, browser requirements, data backup strategy.
+- Create WSL runbook for deterministic test env:
+- backend (Django), frontend (Vite), DB (local Postgres), env vars.
+- Add Docker Compose **in WSL** for backend stack rehearsal:
+- `web` (Django + gunicorn), `db` (Postgres), optional `nginx`.
+- Add backend smoke script for WSL:
+- migrations, checks, backend tests.
 
 ### Acceptance
-- Non-technical local usage path documented and reproducible.
-- App starts and runs without Django backend.
+- Backend stack runs in WSL via Compose.
+- Same env var contract as VPS.
+- Reproducible one-command validation.
 
-## Stage 3: Backend Auth and Cloud Mode
+## Stage 2.5: Local Frontend Deployment Validation (Pre-Auth)
 ### Tasks
-- Implement auth endpoints in Django (session or JWT; prefer JWT for SPA deployment).
-- Add frontend auth flow:
-- login, logout, auth bootstrap, token/session refresh strategy.
-- Enforce auth on existing profile/task/tag/log endpoints.
-- Keep profile tenancy rule unchanged (`Profile` scoped to account).
-- Add mode switch UX:
-- “Use Local Data” vs “Use Cloud Account”.
+- Build and run frontend in WSL in both modes:
+- `VITE_STORAGE_MODE=indexeddb` (offline local mode).
+- `VITE_STORAGE_MODE=api` against WSL backend.
+- Validate static build path:
+- `npm --prefix frontend run build`
+- serve build (`vite preview` or lightweight static server) and verify routing/pages.
+- Verify key journeys in browser:
+- profiles, tasks/actions, new day modal, logs, graphs, admin/API reachability.
+- Confirm mode-specific UX:
+- local mode hides cloud-only import/export actions.
 
 ### Acceptance
-- User can log in and use cloud mode against VPS backend.
-- Unauthorized requests are blocked.
-- Cloud mode parity with current behavior.
+- Frontend is runnable in WSL as a deployed build, not only dev server.
+- IndexedDB mode works without backend.
+- API mode works against WSL backend at `http://127.0.0.1:8000`.
 
-## Stage 4: Local-to-Cloud Migration (One-Time Import)
+## Stage 3: Auth + Cloud Mode
 ### Tasks
-- Add explicit “Upload Local Data to Cloud” action.
-- Migration flow:
-- Read all local IndexedDB entities.
-- Create/select cloud profile(s).
-- Upsert records in dependency order:
+- Implement backend auth for SPA (JWT preferred).
+- Enforce auth on profile/task/tag/log endpoints.
+- Frontend login/logout/session bootstrap.
+- Mode toggle UX:
+- Local (IndexedDB) vs Cloud (API).
+
+### Acceptance
+- Cloud mode works in WSL against authenticated backend.
+- Unauthorized access is blocked.
+
+## Stage 4: Local-to-Cloud Migration
+### Tasks
+- Add explicit migration action in UI.
+- Read local IndexedDB data and upload to selected cloud profile/account.
+- Upsert order:
 - profiles -> tags -> tasks -> checklist/streak rules -> logs.
-- Preserve UUIDs where possible; map collisions safely.
-- Show migration report:
-- created/updated/skipped counts and errors.
+- Preserve UUIDs when possible; remap collisions.
+- Return and display migration report (created/updated/skipped/errors).
 
 ### Acceptance
-- User can migrate local data to account with clear result summary.
+- User can migrate local data safely and verify counts.
 - No silent data loss.
 
-## Stage 5: VPS Deployment
+## Stage 5: Dockerized VPS Deployment
+### Docker Topology
+- `web`: Django app container (gunicorn).
+- `db`: Postgres container with named volume.
+- `nginx`: reverse proxy + TLS termination (or external Caddy/Traefik).
+- Optional `worker`/`beat` for async jobs later.
+
 ### Tasks
-- Provision VPS:
-- Ubuntu, Python env, Postgres, Nginx, systemd service.
-- Deploy Django:
-- env vars, secrets, `ALLOWED_HOSTS`, `CSRF_TRUSTED_ORIGINS`, static files, HTTPS.
-- Deploy frontend static bundle:
-- Nginx serving build artifacts.
-- Configure CORS/CSRF according to auth method.
-- Add backups:
-- Postgres daily backup + retention.
+- Add production `Dockerfile` for Django.
+- Add `docker-compose.prod.yml` with:
+- restart policies, healthchecks, env files, volumes.
+- Configure Django prod settings:
+- `ALLOWED_HOSTS`, `CSRF_TRUSTED_ORIGINS`, secure cookies, static/media strategy.
+- Add deployment script:
+- pull image/build, run migrations, restart stack, run health check.
+- Add backup strategy:
+- Postgres dump cron + retention + restore drill.
 
 ### Acceptance
-- Public HTTPS endpoint for API and frontend.
-- Login + cloud mode works from browser.
-- Health checks and restart strategy documented.
+- VPS serves API over HTTPS.
+- `docker compose up -d` produces healthy stack.
+- Migrations run successfully in deployment flow.
+- Frontend cloud mode can login and operate end-to-end.
 
-## Data and Security Requirements
-- Never commit secrets (`.env` only, ignored by git).
-- Use unique, rotated production credentials.
-- Enforce HTTPS in production.
+## Security and Secrets
+- Keep secrets in `.env`/VPS secret store, never in git.
+- Use unique production DB credentials.
+- Enforce HTTPS and secure cookie settings.
 - Rate-limit auth endpoints.
-- Add audit logs for import/migration actions.
+- Audit import/migration operations.
 
-## Testing Plan for Rollout
-- Unit tests:
-- repository parity (api vs indexeddb) for action semantics.
-- Integration tests:
-- local mode end-to-end without backend.
-- cloud mode end-to-end with auth.
-- Migration tests:
-- local sample dataset -> cloud import verification.
-- Smoke checks on VPS after deployment.
+## CI/CD Outline (After Stage 3)
+- On main branch:
+1. Backend tests + checks.
+2. Frontend typecheck + tests.
+3. Build/push backend Docker image.
+4. Deploy to VPS (manual approval step recommended).
+5. Run post-deploy smoke checks.
+
+## WSL Validation Checklist (Before Every VPS Deploy)
+1. `docker compose -f docker-compose.wsl.yml up -d --build`
+2. `python manage.py migrate`
+3. `python manage.py check`
+4. `python manage.py test`
+5. `npm --prefix frontend run typecheck`
+6. `npm --prefix frontend run test`
+7. Local smoke of login, task actions, new day, import/export.
 
 ## Risks and Mitigations
-- Risk: Divergent behavior between local and cloud actions.
-- Mitigation: shared service logic + parity tests per action.
-- Risk: Data mismatch during migration.
-- Mitigation: deterministic import order + detailed migration report + dry-run option.
-- Risk: Browser storage limits.
-- Mitigation: export/backup tooling + size warning in UI.
-- Risk: Auth/CORS misconfiguration.
-- Mitigation: staging checklist with explicit CSRF/CORS tests.
+- **Parity drift (IndexedDB vs API):** shared service rules + parity tests.
+- **Migration mismatches:** deterministic import order + explicit report.
+- **Env drift (WSL vs VPS):** same Compose model and env schema.
+- **Auth/CORS issues:** explicit WSL checklist before VPS deploy.
 
 ## Deliverables
 - `DEPLOYMENT_PLAN_INDEXEDDB.md` (this file).
 - Frontend storage abstraction + IndexedDB implementation.
-- Auth-enabled backend and cloud mode.
-- Migration tooling local -> cloud.
-- VPS deployment scripts/docs.
+- Auth-enabled backend cloud mode.
+- Local-to-cloud migration flow.
+- Dockerized backend deployment assets (`Dockerfile`, compose, runbooks).
 
 ## Recommended Execution Order
-1. Stage 0 + Stage 1 (make local mode fully usable).
-2. Stage 2 (document and package local deployment).
-3. Stage 3 (auth and cloud mode).
-4. Stage 4 (local-to-cloud migration).
-5. Stage 5 (production VPS rollout).
+1. Stage 0
+2. Stage 1
+3. Stage 2 (WSL pre-prod baseline)
+4. Stage 2.5 (frontend deployment validation in WSL)
+5. Stage 3
+6. Stage 4
+7. Stage 5

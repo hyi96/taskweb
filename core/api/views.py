@@ -1,12 +1,18 @@
+from django.contrib.auth import authenticate, login, logout
+from django.contrib.auth import get_user_model
+from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404
+from django.utils.decorators import method_decorator
+from django.views.decorators.csrf import ensure_csrf_cookie
 from rest_framework import mixins, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.exceptions import ValidationError
 from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
+from rest_framework.views import APIView
 
 from core.api.serializers import (
     ActivityDurationSerializer,
@@ -39,6 +45,85 @@ def _to_drf_validation_error(exc: DjangoValidationError) -> ValidationError:
     if hasattr(exc, "message_dict"):
         return ValidationError(exc.message_dict)
     return ValidationError({"detail": exc.messages})
+
+
+def _session_payload(request):
+    user = request.user
+    if not user.is_authenticated:
+        return {"authenticated": False, "user_id": None, "username": None}
+    return {"authenticated": True, "user_id": str(user.id), "username": user.get_username()}
+
+
+@method_decorator(ensure_csrf_cookie, name="dispatch")
+class CsrfCookieView(APIView):
+    permission_classes = [AllowAny]
+
+    def get(self, request):
+        return Response({"detail": "CSRF cookie set."}, status=status.HTTP_200_OK)
+
+
+class SessionStatusView(APIView):
+    permission_classes = [AllowAny]
+
+    def get(self, request):
+        return Response(_session_payload(request), status=status.HTTP_200_OK)
+
+
+class LoginView(APIView):
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        username = str(request.data.get("username", "")).strip()
+        password = str(request.data.get("password", ""))
+        if not username:
+            raise ValidationError({"username": "This field is required."})
+        if not password:
+            raise ValidationError({"password": "This field is required."})
+        user = authenticate(request, username=username, password=password)
+        if user is None:
+            raise ValidationError({"non_field_errors": ["Invalid username or password."]})
+        if not user.is_active:
+            raise ValidationError({"non_field_errors": ["This user account is inactive."]})
+        login(request, user)
+        return Response(_session_payload(request), status=status.HTTP_200_OK)
+
+
+class LogoutView(APIView):
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        if request.user.is_authenticated:
+            logout(request)
+        return Response(_session_payload(request), status=status.HTTP_200_OK)
+
+
+class SignupView(APIView):
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        username = str(request.data.get("username", "")).strip()
+        password = str(request.data.get("password", ""))
+        password_confirm = str(request.data.get("password_confirm", ""))
+        if not username:
+            raise ValidationError({"username": "This field is required."})
+        if not password:
+            raise ValidationError({"password": "This field is required."})
+        if password != password_confirm:
+            raise ValidationError({"password_confirm": ["Passwords do not match."]})
+
+        user_model = get_user_model()
+        if user_model.objects.filter(username=username).exists():
+            raise ValidationError({"username": ["A user with that username already exists."]})
+
+        try:
+            validate_password(password)
+        except DjangoValidationError as exc:
+            raise ValidationError({"password": exc.messages}) from exc
+
+        user = user_model.objects.create_user(username=username, password=password)
+        Profile.objects.create(account=user, name="Default")
+        login(request, user)
+        return Response(_session_payload(request), status=status.HTTP_201_CREATED)
 
 
 class ProfileScopedMixin:

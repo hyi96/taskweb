@@ -174,3 +174,12 @@ class TestApiScoping(TestCase):
 
         self.daily.refresh_from_db()
         self.assertEqual(self.daily.last_completion_period, today)
+
+    def test_new_day_preview_skips_daily_created_in_current_period(self):
+        self.client.force_authenticate(user=self.user)
+        today = timezone.localdate()
+        Task.objects.filter(id=self.daily.id).update(created_at=timezone.make_aware(timezone.datetime(today.year, today.month, today.day, 10, 0, 0)))
+
+        preview = self.client.get(reverse("new-day-list"), {"profile_id": str(self.profile.id)})
+        self.assertEqual(preview.status_code, 200)
+        self.assertEqual(preview.data["dailies"], [])

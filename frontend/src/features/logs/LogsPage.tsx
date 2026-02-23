@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
-import { fetchLogs } from "../../shared/api/logs";
+import { fetchLogs } from "../../shared/repositories/client";
 import { useProfileContext } from "../profiles/ProfileContext";
 
 export function formatDuration(duration: string | null) {

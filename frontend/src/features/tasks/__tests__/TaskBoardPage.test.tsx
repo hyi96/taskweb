@@ -19,21 +19,14 @@ vi.mock("../../../features/activity/CurrentActivityContext", () => ({
   useCurrentActivity: () => ({ setCurrentActivity: setCurrentActivityMock })
 }));
 
-vi.mock("../../../shared/api/tags", () => ({
-  fetchTags: (...args: unknown[]) => fetchTagsMock(...args)
-}));
-
-vi.mock("../../../shared/api/checklist", () => ({
-  replaceChecklistItems: vi.fn()
-}));
-
-vi.mock("../../../shared/api/streakRules", () => ({
-  replaceStreakRules: vi.fn()
-}));
-
-vi.mock("../../../shared/api/tasks", () => ({
+vi.mock("../../../shared/repositories/client", () => ({
+  fetchTags: (...args: unknown[]) => fetchTagsMock(...args),
+  replaceChecklistItems: vi.fn(),
+  replaceStreakRules: vi.fn(),
   fetchTasks: (...args: unknown[]) => fetchTasksMock(...args),
   habitIncrement: (...args: unknown[]) => habitIncrementMock(...args),
+  fetchNewDayPreview: vi.fn().mockResolvedValue({ profile_id: "11111111-1111-1111-1111-111111111111", dailies: [] }),
+  startNewDay: vi.fn().mockResolvedValue({ updated_count: 0 }),
   dailyComplete: vi.fn(),
   todoComplete: vi.fn(),
   rewardClaim: vi.fn(),

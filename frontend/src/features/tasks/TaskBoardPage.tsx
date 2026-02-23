@@ -1,20 +1,21 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ApiError } from "../../shared/api/client";
-import { replaceChecklistItems } from "../../shared/api/checklist";
-import { fetchNewDayPreview, startNewDay } from "../../shared/api/newDay";
-import { replaceStreakRules } from "../../shared/api/streakRules";
-import { fetchTags } from "../../shared/api/tags";
 import {
   createTask,
   dailyComplete,
   deleteTask,
+  fetchNewDayPreview,
+  fetchTags,
   fetchTasks,
   habitIncrement,
+  replaceChecklistItems,
+  replaceStreakRules,
   rewardClaim,
+  startNewDay,
   todoComplete,
   updateTask
-} from "../../shared/api/tasks";
+} from "../../shared/repositories/client";
 import type { NewDayPreviewItem } from "../../shared/types/newDay";
 import type { Task } from "../../shared/types/task";
 import { useCurrentActivity } from "../activity/CurrentActivityContext";

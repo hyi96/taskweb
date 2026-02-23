@@ -1,7 +1,8 @@
 import { useQuery } from "@tanstack/react-query";
 import type { PropsWithChildren } from "react";
-import { createContext, useContext, useMemo, useState } from "react";
-import { fetchProfiles } from "../../shared/api/profiles";
+import { createContext, useContext, useEffect, useMemo, useState } from "react";
+import { useAuthContext } from "../auth/AuthContext";
+import { fetchProfiles, storageMode } from "../../shared/repositories/client";
 import type { Profile } from "../../shared/types/profile";
 
 const STORAGE_KEY = "taskweb.profile_id";
@@ -25,11 +26,13 @@ function readStoredProfileId() {
 }
 
 export function ProfileProvider({ children }: PropsWithChildren) {
+  const { isAuthenticated, isCloudMode } = useAuthContext();
   const [profileId, setProfileIdState] = useState<string>(readStoredProfileId);
 
   const profilesQuery = useQuery({
     queryKey: ["profiles"],
-    queryFn: fetchProfiles
+    queryFn: fetchProfiles,
+    enabled: storageMode === "indexeddb" || (isCloudMode && isAuthenticated)
   });
 
   const setProfileId = (next: string) => {
@@ -44,6 +47,28 @@ export function ProfileProvider({ children }: PropsWithChildren) {
 
   const profiles = profilesQuery.data ?? [];
   const activeProfile = profiles.find((profile) => profile.id === profileId) ?? null;
+
+  useEffect(() => {
+    if (isCloudMode && !isAuthenticated) {
+      setProfileIdState("");
+      window.localStorage.setItem(STORAGE_KEY, "");
+    }
+  }, [isCloudMode, isAuthenticated]);
+
+  useEffect(() => {
+    if (profilesQuery.isLoading) {
+      return;
+    }
+
+    const hasProfiles = profiles.length > 0;
+    const isCurrentValid = profileId ? profiles.some((profile) => profile.id === profileId) : false;
+    const fallbackId = hasProfiles ? profiles[0].id : "";
+
+    if (!isCurrentValid && profileId !== fallbackId) {
+      setProfileIdState(fallbackId);
+      window.localStorage.setItem(STORAGE_KEY, fallbackId);
+    }
+  }, [profilesQuery.isLoading, profiles, profileId]);
 
   const value = useMemo(
     () => ({
