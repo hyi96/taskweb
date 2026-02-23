@@ -4,7 +4,13 @@ import type {
   CreateTaskInput,
   UpdateTaskInput,
 } from "./types";
+import {
+  fetchLocalProfilesForMigration,
+  migrateLocalProfileToCloud,
+  type LocalToCloudMigrationReport,
+} from "./localMigration";
 export type { TaskAppImportResult } from "../api/profiles";
+export type { LocalToCloudMigrationReport };
 
 export { storageMode };
 export { setStorageMode };
@@ -119,4 +125,12 @@ export async function fetchNewDayPreview(profileId: string) {
 
 export async function startNewDay(profileId: string, checkedDailyIds: string[]) {
   return getRepositories().newDay.start(profileId, checkedDailyIds);
+}
+
+export async function fetchLocalProfiles() {
+  return fetchLocalProfilesForMigration();
+}
+
+export async function migrateLocalProfile(localProfileId: string, targetCloudProfileId: string) {
+  return migrateLocalProfileToCloud({ localProfileId, targetCloudProfileId });
 }

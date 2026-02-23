@@ -4,8 +4,11 @@ import {
   createProfile,
   deleteProfile,
   exportProfileTaskApp,
+  fetchLocalProfiles,
   importProfileTaskApp,
+  migrateLocalProfile,
   storageMode,
+  type LocalToCloudMigrationReport,
   type TaskAppImportResult
 } from "../../shared/repositories/client";
 import { useProfileContext } from "./ProfileContext";
@@ -19,6 +22,8 @@ export function ProfilesPage() {
   const [popupMessage, setPopupMessage] = useState("");
   const [popupTone, setPopupTone] = useState<"error" | "success">("success");
   const [busyProfileId, setBusyProfileId] = useState("");
+  const [localProfiles, setLocalProfiles] = useState<Array<{ id: string; name: string }>>([]);
+  const [localSourceId, setLocalSourceId] = useState("");
   const importInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
 
   useEffect(() => {
@@ -54,6 +59,32 @@ export function ProfilesPage() {
       void queryClient.invalidateQueries({ queryKey: ["logs"] });
     }
   });
+
+  useEffect(() => {
+    if (!isCloudMode) {
+      return;
+    }
+    let active = true;
+    const loadLocalProfiles = async () => {
+      try {
+        const items = await fetchLocalProfiles();
+        if (!active) {
+          return;
+        }
+        setLocalProfiles(items.map((item) => ({ id: item.id, name: item.name })));
+        setLocalSourceId((current) => current || items[0]?.id || "");
+      } catch {
+        if (active) {
+          setLocalProfiles([]);
+          setLocalSourceId("");
+        }
+      }
+    };
+    void loadLocalProfiles();
+    return () => {
+      active = false;
+    };
+  }, [isCloudMode]);
 
   const downloadArchive = async (profileIdForExport: string, profileName: string) => {
     try {
@@ -108,6 +139,36 @@ export function ProfilesPage() {
     }
   };
 
+  const runLocalMigration = async (targetProfileId: string, targetProfileName: string) => {
+    if (!localSourceId) {
+      setPopupTone("error");
+      setPopupMessage("Select a local profile to migrate.");
+      return;
+    }
+    const sourceName = localProfiles.find((item) => item.id === localSourceId)?.name ?? "local profile";
+    if (!window.confirm(`Migrate local profile "${sourceName}" into cloud profile "${targetProfileName}"?`)) {
+      return;
+    }
+    try {
+      setBusyProfileId(targetProfileId);
+      const report = await migrateLocalProfile(localSourceId, targetProfileId);
+      setError("");
+      setPopupTone(report.errors.length ? "error" : "success");
+      setPopupMessage(formatLocalMigrationSummary(report, sourceName, targetProfileName));
+      await queryClient.invalidateQueries({ queryKey: ["profiles"] });
+      await queryClient.invalidateQueries({ queryKey: ["tasks"] });
+      await queryClient.invalidateQueries({ queryKey: ["tags"] });
+      await queryClient.invalidateQueries({ queryKey: ["logs"] });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Failed to migrate local data.";
+      setError(message);
+      setPopupTone("error");
+      setPopupMessage(message);
+    } finally {
+      setBusyProfileId("");
+    }
+  };
+
   return (
     <div className="board-layout">
       <h2>Profiles</h2>
@@ -132,6 +193,22 @@ export function ProfilesPage() {
         </button>
       </div>
       {!isCloudMode && <div className="status info">Import/export is available in cloud mode only.</div>}
+      {isCloudMode && (
+        <div className="inline-controls">
+          <label htmlFor="local-source-profile">Local source</label>
+          <select
+            id="local-source-profile"
+            value={localSourceId}
+            onChange={(event) => setLocalSourceId(event.target.value)}
+          >
+            {localProfiles.map((item) => (
+              <option key={item.id} value={item.id}>
+                {item.name}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
 
       {isProfilesLoading && <div className="status info">Loading profiles...</div>}
       {error && <div className="status error">{error}</div>}
@@ -176,6 +253,14 @@ export function ProfilesPage() {
                   >
                     Import
                   </button>
+                  <button
+                    type="button"
+                    className="ghost-button"
+                    disabled={busyProfileId === profile.id || !localSourceId}
+                    onClick={() => void runLocalMigration(profile.id, profile.name)}
+                  >
+                    Migrate local
+                  </button>
                 </>
               )}
               <button
@@ -213,4 +298,15 @@ function formatImportSummary(result: TaskAppImportResult): string {
     `${imported.logs} logs`,
     `(${imported.logs_skipped} skipped)`
   ].join(" ");
+}
+
+function formatLocalMigrationSummary(
+  report: LocalToCloudMigrationReport,
+  sourceName: string,
+  targetName: string
+): string {
+  const chunks = Object.entries(report.counts).map(([key, value]) => {
+    return `${key}: +${value.created} ~${value.updated} =${value.skipped} !${value.errors}`;
+  });
+  return [`Migrated "${sourceName}" to "${targetName}".`, ...chunks].join(" ");
 }

@@ -65,11 +65,11 @@ export function LoginPage() {
   return (
     <div className="auth-layout">
       <div className="auth-card">
-        <h2>{mode === "signup" ? "Cloud Sign Up" : "Cloud Sign In"}</h2>
+        <h2>{mode === "signup" ? "Sign up" : "Sign in"}</h2>
         <p>
           {mode === "signup"
-            ? "Create a Django account for cloud storage mode."
-            : "Sign in with your Django account to use API storage mode."}
+            ? "Create an account to use cloud storage."
+            : "Sign in to use cloud storage."}
         </p>
         <div className="auth-mode-toggle">
           <button

@@ -38,6 +38,7 @@ from core.services.task_actions import (
     start_new_day,
     todo_complete,
 )
+from core.services.local_migration import LocalToCloudMigrationService
 from core.services.taskapp_portability import TaskAppPortabilityService
 
 
@@ -167,6 +168,21 @@ class ProfileViewSet(viewsets.ModelViewSet):
                 profile=profile,
                 user=request.user,
                 archive_file=upload,
+            )
+        except DjangoValidationError as exc:
+            raise _to_drf_validation_error(exc) from exc
+        return Response(result, status=status.HTTP_200_OK)
+
+    @action(detail=True, methods=["post"], url_path="migrate-local", url_name="migrate-local")
+    def migrate_local(self, request, pk=None):
+        profile = self.get_object()
+        if not isinstance(request.data, dict):
+            raise ValidationError({"detail": "Invalid migration payload."})
+        try:
+            result = LocalToCloudMigrationService.migrate(
+                profile=profile,
+                user=request.user,
+                payload=request.data,
             )
         except DjangoValidationError as exc:
             raise _to_drf_validation_error(exc) from exc

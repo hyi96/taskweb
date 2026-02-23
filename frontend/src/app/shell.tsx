@@ -46,7 +46,7 @@ export function AppShell({ children }: PropsWithChildren) {
                   window.location.reload();
                 }}
               >
-                Use cloud mode
+                Use cloud storage
               </button>
             </div>
           ) : null}
