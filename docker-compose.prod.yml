@@ -1,0 +1,45 @@
+services:
+  db:
+    image: postgres:16
+    container_name: taskweb-db-prod
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${DB_NAME}
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+    volumes:
+      - taskweb_db_data_prod:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME}"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: taskweb-web-prod
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    env_file:
+      - ../env/.env.prod
+    environment:
+      DB_HOST: db
+      DB_PORT: "5432"
+    ports:
+      - "127.0.0.1:8000:8000"
+    command: >
+      sh -c "python manage.py migrate &&
+             python manage.py check &&
+             gunicorn taskweb.wsgi:application --bind 0.0.0.0:8000 --workers 2"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/healthz/', timeout=3)"]
+      interval: 15s
+      timeout: 5s
+      retries: 8
+
+volumes:
+  taskweb_db_data_prod:

@@ -13,6 +13,7 @@ https://docs.djangoproject.com/en/5.2/ref/settings/
 import os
 import sys
 from pathlib import Path
+from django.core.exceptions import ImproperlyConfigured
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -38,10 +39,13 @@ _load_dotenv(BASE_DIR / ".env")
 # See https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'django-insecure-+9q!4*t*102y#s!a9dm98x-a)v2+6iiokrq!)+9627d$k_124@'
+_DEV_FALLBACK_SECRET_KEY = "django-insecure-dev-only-change-me"
+SECRET_KEY = os.environ.get("DJANGO_SECRET_KEY", _DEV_FALLBACK_SECRET_KEY)
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = os.environ.get("DJANGO_DEBUG", "1") == "1"
+if not DEBUG and SECRET_KEY == _DEV_FALLBACK_SECRET_KEY:
+    raise ImproperlyConfigured("DJANGO_SECRET_KEY must be set when DJANGO_DEBUG=0.")
 
 _default_hosts = ["127.0.0.1", "localhost"]
 ALLOWED_HOSTS = [host.strip() for host in os.environ.get("ALLOWED_HOSTS", ",".join(_default_hosts)).split(",") if host.strip()]
@@ -94,6 +98,14 @@ CORS_ALLOWED_ORIGINS = [
     if origin.strip()
 ]
 CORS_ALLOW_CREDENTIALS = True
+
+SESSION_COOKIE_SECURE = os.environ.get("SESSION_COOKIE_SECURE", "1" if not DEBUG else "0") == "1"
+CSRF_COOKIE_SECURE = os.environ.get("CSRF_COOKIE_SECURE", "1" if not DEBUG else "0") == "1"
+SECURE_SSL_REDIRECT = os.environ.get("SECURE_SSL_REDIRECT", "1" if not DEBUG else "0") == "1"
+SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+SECURE_HSTS_SECONDS = int(os.environ.get("SECURE_HSTS_SECONDS", "31536000" if not DEBUG else "0"))
+SECURE_HSTS_INCLUDE_SUBDOMAINS = os.environ.get("SECURE_HSTS_INCLUDE_SUBDOMAINS", "1" if not DEBUG else "0") == "1"
+SECURE_HSTS_PRELOAD = os.environ.get("SECURE_HSTS_PRELOAD", "0") == "1"
 
 ROOT_URLCONF = 'taskweb.urls'
 
