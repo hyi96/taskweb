@@ -28,7 +28,7 @@ docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" exec web python manage.
 
 echo "[deploy] building frontend..."
 npm --prefix "$ROOT_DIR/frontend" ci
-VITE_STORAGE_MODE=api VITE_API_BASE_URL="https://taskweb-api.hyi96.dev" npm --prefix "$ROOT_DIR/frontend" run build
+VITE_STORAGE_MODE=api VITE_API_BASE_URL= npm --prefix "$ROOT_DIR/frontend" run build
 
 echo "[deploy] syncing frontend build to /var/www/taskweb..."
 sudo mkdir -p /var/www/taskweb
