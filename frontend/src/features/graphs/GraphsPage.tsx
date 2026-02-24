@@ -188,7 +188,8 @@ export function aggregateValues(
       if (targetValue === "gold_delta") {
         values[i] = entries.reduce((sum, log) => sum + Number(log.gold_delta || 0), 0);
       } else {
-        const latest = entries.sort((a, b) => Date.parse(a.timestamp) - Date.parse(b.timestamp)).at(-1);
+        const sorted = entries.sort((a, b) => Date.parse(a.timestamp) - Date.parse(b.timestamp));
+        const latest = sorted.length ? sorted[sorted.length - 1] : undefined;
         if (latest) lastGold = Number(latest.user_gold || 0);
         values[i] = lastGold ?? Number.NaN;
       }

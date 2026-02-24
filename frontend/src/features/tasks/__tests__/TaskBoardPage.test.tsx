@@ -40,11 +40,13 @@ vi.mock("../TaskEditorModal", () => ({
 }));
 
 function makeTask(partial: Partial<Task> & Pick<Task, "id" | "task_type" | "title">): Task {
+  const { id, task_type, title, ...rest } = partial;
   return {
-    id: partial.id,
+    ...rest,
+    id,
     profile_id: "11111111-1111-1111-1111-111111111111",
-    task_type: partial.task_type,
-    title: partial.title,
+    task_type,
+    title,
     notes: "",
     is_hidden: false,
     tag_ids: [],
@@ -69,8 +71,7 @@ function makeTask(partial: Partial<Task> & Pick<Task, "id" | "task_type" | "titl
     total_actions_count: 0,
     last_action_at: null,
     created_at: "2026-02-20T00:00:00Z",
-    updated_at: "2026-02-20T00:00:00Z",
-    ...partial
+    updated_at: "2026-02-20T00:00:00Z"
   };
 }
 
@@ -98,7 +99,7 @@ describe("TaskBoardPage", () => {
     fetchTasksMock.mockResolvedValue(tasks);
     fetchTagsMock.mockResolvedValue([]);
 
-    let resolveMutation: ((value: Task) => void) | null = null;
+    let resolveMutation: ((value: Task) => void) | undefined;
     habitIncrementMock.mockImplementation(
       () =>
         new Promise<Task>((resolve) => {
@@ -115,7 +116,9 @@ describe("TaskBoardPage", () => {
     await waitFor(() => expect(buttons[0].hasAttribute("disabled")).toBe(true));
     expect(buttons[1].hasAttribute("disabled")).toBe(false);
 
-    resolveMutation?.({ ...tasks[0], current_count: "1.00", total_actions_count: 1 });
+    if (resolveMutation) {
+      resolveMutation({ ...tasks[0], current_count: "1.00", total_actions_count: 1 });
+    }
     await waitFor(() => expect(buttons[0].hasAttribute("disabled")).toBe(false));
   });
 

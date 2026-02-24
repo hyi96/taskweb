@@ -4,11 +4,13 @@ import type { LogEntry } from "../../../shared/types/log";
 import type { Task } from "../../../shared/types/task";
 
 function makeTask(partial: Partial<Task> & Pick<Task, "id" | "task_type" | "title">): Task {
+  const { id, task_type, title, ...rest } = partial;
   return {
-    id: partial.id,
+    ...rest,
+    id,
     profile_id: "11111111-1111-1111-1111-111111111111",
-    task_type: partial.task_type,
-    title: partial.title,
+    task_type,
+    title,
     notes: "",
     is_hidden: false,
     tag_ids: [],
@@ -33,8 +35,7 @@ function makeTask(partial: Partial<Task> & Pick<Task, "id" | "task_type" | "titl
     total_actions_count: 0,
     last_action_at: null,
     created_at: "2026-02-20T00:00:00Z",
-    updated_at: "2026-02-20T00:00:00Z",
-    ...partial
+    updated_at: "2026-02-20T00:00:00Z"
   };
 }
 

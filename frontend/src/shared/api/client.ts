@@ -52,6 +52,10 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
   const method = options.method ?? "GET";
   const csrfToken = getCookie("csrftoken");
   const isFormData = typeof FormData !== "undefined" && options.body instanceof FormData;
+  let requestBody: BodyInit | undefined;
+  if (options.body !== undefined) {
+    requestBody = isFormData ? (options.body as FormData) : JSON.stringify(options.body);
+  }
   const headers: Record<string, string> = {
     ...(isFormData ? {} : { "Content-Type": "application/json" }),
     ...(method !== "GET" && csrfToken ? { "X-CSRFToken": csrfToken } : {}),
@@ -61,7 +65,7 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
     method,
     credentials: "include",
     headers,
-    body: options.body ? (isFormData ? options.body : JSON.stringify(options.body)) : undefined
+    body: requestBody
   });
 
   if (response.status === 204) {
