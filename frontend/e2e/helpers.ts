@@ -46,14 +46,18 @@ export async function createProfileViaUi(page: Page, name: string): Promise<{ id
 export async function ensureProfileSelected(page: Page, profileName: string, profileId?: string) {
   const selector = page.locator("#profile-id");
   await expect(selector).toBeVisible();
-  const hasLabel = await selector.locator(`option:has-text("${profileName}")`).count();
-  if (hasLabel > 0) {
-    await selector.selectOption({ label: profileName });
+  if (profileId) {
+    await page.evaluate((id) => window.localStorage.setItem("taskweb.profile_id", id), profileId);
+    await selector.selectOption({ value: profileId });
+    await expect(selector).toHaveValue(profileId);
+    await expect
+      .poll(async () => await page.evaluate(() => window.localStorage.getItem("taskweb.profile_id")))
+      .toBe(profileId);
     return;
   }
-  if (profileId) {
-    await selector.selectOption({ value: profileId });
-  }
+
+  await selector.selectOption({ label: profileName });
+  await expect(selector.locator("option:checked")).toContainText(profileName);
 }
 
 export async function quickAddTask(page: Page, placeholder: string, title: string) {

@@ -24,13 +24,14 @@ export async function loginWithPassword(username: string, password: string): Pro
 
 export async function signUpWithPassword(
   username: string,
+  email: string,
   password: string,
   passwordConfirm: string
 ): Promise<SessionStatus> {
   await ensureCsrfCookie();
   return apiRequest<SessionStatus>("/api/auth/signup/", {
     method: "POST",
-    body: { username, password, password_confirm: passwordConfirm }
+    body: { username, email, password, password_confirm: passwordConfirm }
   });
 }
 

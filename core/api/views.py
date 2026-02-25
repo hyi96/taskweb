@@ -2,6 +2,7 @@ from django.contrib.auth import authenticate, login, logout
 from django.contrib.auth import get_user_model
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError as DjangoValidationError
+from django.core.validators import validate_email
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404
 from django.utils.decorators import method_decorator
@@ -103,25 +104,35 @@ class SignupView(APIView):
 
     def post(self, request):
         username = str(request.data.get("username", "")).strip()
+        email = str(request.data.get("email", "")).strip().lower()
         password = str(request.data.get("password", ""))
         password_confirm = str(request.data.get("password_confirm", ""))
         if not username:
             raise ValidationError({"username": "This field is required."})
+        if not email:
+            raise ValidationError({"email": "This field is required."})
         if not password:
             raise ValidationError({"password": "This field is required."})
         if password != password_confirm:
             raise ValidationError({"password_confirm": ["Passwords do not match."]})
 
+        try:
+            validate_email(email)
+        except DjangoValidationError as exc:
+            raise ValidationError({"email": exc.messages}) from exc
+
         user_model = get_user_model()
         if user_model.objects.filter(username=username).exists():
             raise ValidationError({"username": ["A user with that username already exists."]})
+        if user_model.objects.filter(email__iexact=email).exists():
+            raise ValidationError({"email": ["A user with that email already exists."]})
 
         try:
             validate_password(password)
         except DjangoValidationError as exc:
             raise ValidationError({"password": exc.messages}) from exc
 
-        user = user_model.objects.create_user(username=username, password=password)
+        user = user_model.objects.create_user(username=username, email=email, password=password)
         Profile.objects.create(account=user, name="Default")
         login(request, user)
         return Response(_session_payload(request), status=status.HTTP_201_CREATED)

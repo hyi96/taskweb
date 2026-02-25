@@ -7,6 +7,7 @@ function authErrorMessage(error: unknown): string {
   if (error instanceof ApiError && error.payload && typeof error.payload === "object") {
     const payload = error.payload as Record<string, unknown>;
     const username = payload.username;
+    const email = payload.email;
     const password = payload.password;
     const passwordConfirm = payload.password_confirm;
     const nonField = payload.non_field_errors;
@@ -15,6 +16,9 @@ function authErrorMessage(error: unknown): string {
     }
     if (Array.isArray(username) && typeof username[0] === "string") {
       return username[0];
+    }
+    if (Array.isArray(email) && typeof email[0] === "string") {
+      return email[0];
     }
     if (Array.isArray(password) && typeof password[0] === "string") {
       return password[0];
@@ -33,6 +37,7 @@ export function LoginPage() {
   const { login, signup } = useAuthContext();
   const [mode, setMode] = useState<"login" | "signup">("login");
   const [username, setUsername] = useState("");
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [passwordConfirm, setPasswordConfirm] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -44,7 +49,7 @@ export function LoginPage() {
     setIsSubmitting(true);
     try {
       if (mode === "signup") {
-        await signup(username.trim(), password, passwordConfirm);
+        await signup(username.trim(), email.trim(), password, passwordConfirm);
       } else {
         await login(username.trim(), password);
       }
@@ -116,16 +121,28 @@ export function LoginPage() {
             />
           </label>
           {mode === "signup" ? (
-            <label>
-              <span>Confirm password</span>
-              <input
-                type="password"
-                autoComplete="new-password"
-                value={passwordConfirm}
-                onChange={(event) => setPasswordConfirm(event.target.value)}
-                required
-              />
-            </label>
+            <>
+              <label>
+                <span>Email</span>
+                <input
+                  type="email"
+                  autoComplete="email"
+                  value={email}
+                  onChange={(event) => setEmail(event.target.value)}
+                  required
+                />
+              </label>
+              <label>
+                <span>Confirm password</span>
+                <input
+                  type="password"
+                  autoComplete="new-password"
+                  value={passwordConfirm}
+                  onChange={(event) => setPasswordConfirm(event.target.value)}
+                  required
+                />
+              </label>
+            </>
           ) : null}
           {error ? <div className="status error">{error}</div> : null}
           <button type="submit" className="action-button" disabled={isSubmitting}>

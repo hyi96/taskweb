@@ -95,6 +95,8 @@ class TestTaskActionsService(TestCase):
             best_streak=2,
             last_completion_period=date(2026, 2, 20),
         )
+        Task.objects.filter(id=task.id).update(created_at=timezone.make_aware(timezone.datetime(2026, 2, 1, 8, 0, 0)))
+        task.refresh_from_db()
         StreakBonusRule.objects.create(task=task, streak_goal=2, bonus_percent=Decimal("10"))
         StreakBonusRule.objects.create(task=task, streak_goal=3, bonus_percent=Decimal("25"))
 
@@ -102,7 +104,7 @@ class TestTaskActionsService(TestCase):
             task=task,
             profile=self.profile,
             user=self.user,
-            timestamp=timezone.now(),
+            timestamp=timezone.make_aware(timezone.datetime(2026, 2, 21, 9, 0, 0)),
             completion_period=date(2026, 2, 21),
         )
         updated.refresh_from_db()

@@ -1,4 +1,5 @@
 SHELL := /bin/bash
+E2E_ENV_FILE ?= .env.e2e
 
 .PHONY: test-backend test-frontend test-e2e test-all wsl-up wsl-down wsl-logs wsl-smoke
 
@@ -13,7 +14,7 @@ test-e2e:
 	npm --prefix frontend run test:e2e
 
 test-all:
-	bash scripts/test_all.sh
+	E2E_ENV_FILE="$(CURDIR)/$(E2E_ENV_FILE)" bash scripts/test_all.sh
 
 wsl-up:
 	docker compose -f docker-compose.wsl.yml --env-file .env.wsl up -d --build

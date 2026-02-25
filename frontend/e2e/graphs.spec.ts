@@ -27,6 +27,7 @@ test.describe("Graphs page interactions", () => {
     await taskCard(page, habitName).locator(".action-button").click();
 
     await goToFrontend(page, "/graphs");
+    await ensureProfileSelected(page, profileName, profile.id);
     await expect(page.getByRole("heading", { name: "Graphical Insights" })).toBeVisible();
     await expect(page.locator("svg.graph-svg")).toBeVisible();
 
@@ -36,9 +37,8 @@ test.describe("Graphs page interactions", () => {
     const selects = page.locator(".graph-controls select");
     await selects.nth(0).selectOption("habit");
     await selects.nth(1).selectOption("count_delta");
-    await selects.nth(2).selectOption({ label: habitName });
-
     await page.getByPlaceholder("Search target instance...").fill(habitName.slice(0, 8));
+    await expect(page.locator(".graph-search-results li", { hasText: habitName }).first()).toBeVisible({ timeout: 10_000 });
     await page.locator(".graph-search-results li", { hasText: habitName }).first().click();
 
     await expect(selects.nth(0)).toHaveValue("habit");

@@ -24,11 +24,12 @@ test.describe("Current activity flows", () => {
 
     await page.getByPlaceholder("Activity title...").fill(activityTitle);
     await page.getByRole("button", { name: "Start" }).click();
-    await page.waitForTimeout(1500);
+    await expect(page.locator(".activity-time")).toHaveText(/00:00:0[1-9]/, { timeout: 10_000 });
     await page.getByRole("button", { name: "Pause" }).click();
 
     await goToFrontend(page, "/logs");
-    await expect(page.getByText(activityTitle)).toBeVisible();
+    await ensureProfileSelected(page, profileName, profile.id);
+    await expect(page.getByText(activityTitle)).toBeVisible({ timeout: 10_000 });
     await expect(page.getByText("activity_duration")).toBeVisible();
   });
 
@@ -42,10 +43,12 @@ test.describe("Current activity flows", () => {
 
     await page.getByPlaceholder("Activity title...").fill(activityTitle);
     await page.getByRole("button", { name: "Start" }).click();
-    await page.waitForTimeout(1500);
+    await expect(page.locator(".activity-time")).toHaveText(/00:00:0[1-9]/, { timeout: 10_000 });
     await page.reload();
+    await ensureProfileSelected(page, profileName, profile.id);
 
     await goToFrontend(page, "/logs");
+    await ensureProfileSelected(page, profileName, profile.id);
     await expect
       .poll(async () => await page.getByText(activityTitle).count(), {
         timeout: 10_000

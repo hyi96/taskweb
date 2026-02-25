@@ -4,6 +4,7 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 BACKEND_URL="${BACKEND_URL:-http://127.0.0.1:8000}"
 FRONTEND_URL="${FRONTEND_URL:-http://127.0.0.1:5173}"
+E2E_ENV_FILE="${E2E_ENV_FILE:-${ROOT_DIR}/.env.e2e}"
 
 BACKEND_PID=""
 FRONTEND_PID=""
@@ -17,6 +18,15 @@ cleanup() {
   fi
 }
 trap cleanup EXIT
+
+load_e2e_env() {
+  if [[ -f "${E2E_ENV_FILE}" ]]; then
+    set -a
+    # shellcheck disable=SC1090
+    source "${E2E_ENV_FILE}"
+    set +a
+  fi
+}
 
 wait_for_url() {
   local url="$1"
@@ -40,9 +50,10 @@ echo "==> Frontend unit/integration tests"
 npm --prefix frontend run test
 npm --prefix frontend run typecheck
 
+load_e2e_env
 if [[ -z "${E2E_ADMIN_USERNAME:-}" || -z "${E2E_ADMIN_PASSWORD:-}" ]]; then
   echo "Missing E2E credentials." >&2
-  echo "Set E2E_ADMIN_USERNAME and E2E_ADMIN_PASSWORD before running this script." >&2
+  echo "Set E2E_ADMIN_USERNAME and E2E_ADMIN_PASSWORD in shell or ${E2E_ENV_FILE}." >&2
   exit 1
 fi
 

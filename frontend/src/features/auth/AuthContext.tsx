@@ -10,7 +10,7 @@ type AuthContextValue = {
   isAuthLoading: boolean;
   username: string | null;
   login: (username: string, password: string) => Promise<void>;
-  signup: (username: string, password: string, passwordConfirm: string) => Promise<void>;
+  signup: (username: string, email: string, password: string, passwordConfirm: string) => Promise<void>;
   logout: () => Promise<void>;
   refreshSession: () => Promise<void>;
 };
@@ -67,11 +67,11 @@ export function AuthProvider({ children }: PropsWithChildren) {
     queryClient.removeQueries({ queryKey: ["tags"] });
   };
 
-  const signup = async (usernameInput: string, password: string, passwordConfirm: string) => {
+  const signup = async (usernameInput: string, email: string, password: string, passwordConfirm: string) => {
     if (!isCloudMode) {
       return;
     }
-    await signUpWithPassword(usernameInput, password, passwordConfirm);
+    await signUpWithPassword(usernameInput, email, password, passwordConfirm);
     await queryClient.invalidateQueries({ queryKey: ["auth", "session", storageMode] });
     await queryClient.invalidateQueries({ queryKey: ["profiles"] });
   };
