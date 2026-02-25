@@ -28,6 +28,16 @@ load_e2e_env() {
   fi
 }
 
+ensure_e2e_credentials() {
+  load_e2e_env
+  if [[ -z "${E2E_ADMIN_USERNAME:-}" || -z "${E2E_ADMIN_PASSWORD:-}" ]]; then
+    echo "Missing E2E credentials." >&2
+    echo "Set E2E_ADMIN_USERNAME and E2E_ADMIN_PASSWORD in shell or ${E2E_ENV_FILE}." >&2
+    return 1
+  fi
+  return 0
+}
+
 wait_for_url() {
   local url="$1"
   local max_tries="${2:-60}"
@@ -42,20 +52,24 @@ wait_for_url() {
   return 1
 }
 
+if [[ "${TEST_ALL_CHECK_ENV_ONLY:-0}" == "1" ]]; then
+  ensure_e2e_credentials
+  exit $?
+fi
+
 echo "==> Backend tests"
 cd "${ROOT_DIR}"
+echo "==> Script checks"
+bash scripts/test_test_all_env.sh
+
+echo "==> Backend tests"
 python manage.py test
 
 echo "==> Frontend unit/integration tests"
 npm --prefix frontend run test
 npm --prefix frontend run typecheck
 
-load_e2e_env
-if [[ -z "${E2E_ADMIN_USERNAME:-}" || -z "${E2E_ADMIN_PASSWORD:-}" ]]; then
-  echo "Missing E2E credentials." >&2
-  echo "Set E2E_ADMIN_USERNAME and E2E_ADMIN_PASSWORD in shell or ${E2E_ENV_FILE}." >&2
-  exit 1
-fi
+ensure_e2e_credentials
 
 echo "==> Starting Django server for E2E"
 python manage.py runserver 127.0.0.1:8000 --noreload >/tmp/taskweb-e2e-backend.log 2>&1 &

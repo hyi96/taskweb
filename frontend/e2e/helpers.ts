@@ -22,6 +22,20 @@ export async function loginAsAdmin(page: Page) {
   await expect(page.locator("body")).toContainText("Site administration");
 }
 
+export async function loginThroughApp(page: Page, username = ADMIN_USERNAME, password = ADMIN_PASSWORD) {
+  await goToFrontend(page, "/tasks");
+  await expect(page.getByRole("heading", { name: "Sign in" })).toBeVisible();
+  await page.getByLabel("Username").fill(username);
+  await page.getByLabel("Password").fill(password);
+  const signInForm = page.locator("form.auth-form");
+  const [response] = await Promise.all([
+    page.waitForResponse((resp) => resp.url().includes("/api/auth/login/") && resp.request().method() === "POST"),
+    signInForm.getByRole("button", { name: "Sign in" }).click()
+  ]);
+  expect(response.ok(), `App login failed: ${response.status()} ${await response.text()}`).toBeTruthy();
+  await expect(page.getByText(`Signed in as ${username}`)).toBeVisible();
+}
+
 export async function goToFrontend(page: Page, path = "/tasks") {
   await page.goto(path);
 }

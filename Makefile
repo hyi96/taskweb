@@ -1,7 +1,7 @@
 SHELL := /bin/bash
 E2E_ENV_FILE ?= .env.e2e
 
-.PHONY: test-backend test-frontend test-e2e test-all wsl-up wsl-down wsl-logs wsl-smoke
+.PHONY: test-backend test-frontend test-scripts test-e2e test-all wsl-up wsl-down wsl-logs wsl-smoke
 
 test-backend:
 	python manage.py test
@@ -9,6 +9,9 @@ test-backend:
 test-frontend:
 	npm --prefix frontend run test
 	npm --prefix frontend run typecheck
+
+test-scripts:
+	bash scripts/test_test_all_env.sh
 
 test-e2e:
 	npm --prefix frontend run test:e2e

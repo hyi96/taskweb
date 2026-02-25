@@ -55,4 +55,29 @@ test.describe("Current activity flows", () => {
       })
       .toBeGreaterThan(0);
   });
+
+  test("switching profile while running logs only to previous profile", async ({ page }) => {
+    const firstProfileName = uniqueName("e2e-switch-a");
+    const secondProfileName = uniqueName("e2e-switch-b");
+    const activityTitle = uniqueName("Switch Activity");
+
+    const firstProfile = await createProfileViaUi(page, firstProfileName);
+    const secondProfile = await createProfileViaUi(page, secondProfileName);
+
+    await goToFrontend(page, "/tasks");
+    await ensureProfileSelected(page, firstProfileName, firstProfile.id);
+    await page.getByPlaceholder("Activity title...").fill(activityTitle);
+    await page.getByRole("button", { name: "Start" }).click();
+    await expect(page.locator(".activity-time")).toHaveText(/00:00:0[1-9]/, { timeout: 10_000 });
+
+    await ensureProfileSelected(page, secondProfileName, secondProfile.id);
+    await expect(page.locator(".activity-time")).toHaveText("00:00:00");
+
+    await goToFrontend(page, "/logs");
+    await ensureProfileSelected(page, firstProfileName, firstProfile.id);
+    await expect(page.getByText(activityTitle)).toBeVisible({ timeout: 10_000 });
+
+    await ensureProfileSelected(page, secondProfileName, secondProfile.id);
+    await expect(page.getByText(activityTitle)).toHaveCount(0);
+  });
 });
