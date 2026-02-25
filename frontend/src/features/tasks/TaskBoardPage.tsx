@@ -44,6 +44,8 @@ const DAILY_SORTS = [
   "Created time (old to new)",
   "Gold value (high to low)",
   "Gold value (low to high)",
+  "Due date (earliest to latest)",
+  "Due date (latest to earliest)",
   "Current streak (high to low)",
   "Current streak (low to high)",
   "Best streak (high to low)",
@@ -169,8 +171,14 @@ export function sortTasks(tasks: Task[], sortMode: SortLabel) {
       case "Best streak (low to high)":
         return a.best_streak - b.best_streak;
       case "Due date (earliest to latest)":
+        if (a.task_type === "daily" && b.task_type === "daily") {
+          return periodEndForDaily(a).getTime() - periodEndForDaily(b).getTime();
+        }
         return compareDates(a.due_at, b.due_at, false);
       case "Due date (latest to earliest)":
+        if (a.task_type === "daily" && b.task_type === "daily") {
+          return periodEndForDaily(b).getTime() - periodEndForDaily(a).getTime();
+        }
         return compareDates(a.due_at, b.due_at, true);
       default:
         return 0;

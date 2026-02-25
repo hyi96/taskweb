@@ -42,11 +42,7 @@ vi.mock("../TaskEditorModal", () => ({
 function makeTask(partial: Partial<Task> & Pick<Task, "id" | "task_type" | "title">): Task {
   const { id, task_type, title, ...rest } = partial;
   return {
-    ...rest,
-    id,
     profile_id: "11111111-1111-1111-1111-111111111111",
-    task_type,
-    title,
     notes: "",
     is_hidden: false,
     tag_ids: [],
@@ -71,7 +67,11 @@ function makeTask(partial: Partial<Task> & Pick<Task, "id" | "task_type" | "titl
     total_actions_count: 0,
     last_action_at: null,
     created_at: "2026-02-20T00:00:00Z",
-    updated_at: "2026-02-20T00:00:00Z"
+    updated_at: "2026-02-20T00:00:00Z",
+    id,
+    task_type,
+    title,
+    ...rest
   };
 }
 
@@ -156,6 +156,33 @@ describe("task helpers", () => {
 
     expect(sortTasks([a, b, c], "Gold value (high to low)").map((x) => x.id)).toEqual(["b", "a", "c"]);
     expect(sortTasks([a, b, c], "Due date (earliest to latest)").map((x) => x.id)).toEqual(["a", "b", "c"]);
+  });
+
+  it("sortTasks orders dailies by period-end due date", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-02-18T12:00:00Z"));
+
+    const dailySooner = makeTask({
+      id: "d1",
+      task_type: "daily",
+      title: "Sooner",
+      repeat_cadence: "day",
+      repeat_every: 1,
+      created_at: "2026-02-01T00:00:00Z"
+    });
+    const dailyLater = makeTask({
+      id: "d2",
+      task_type: "daily",
+      title: "Later",
+      repeat_cadence: "week",
+      repeat_every: 1,
+      created_at: "2026-02-01T00:00:00Z"
+    });
+
+    expect(sortTasks([dailyLater, dailySooner], "Due date (earliest to latest)").map((x) => x.id)).toEqual(["d1", "d2"]);
+    expect(sortTasks([dailySooner, dailyLater], "Due date (latest to earliest)").map((x) => x.id)).toEqual(["d2", "d1"]);
+
+    vi.useRealTimers();
   });
 
   it("periodEndForDaily uses repeat_every for weekly cadence", () => {
