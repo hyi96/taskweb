@@ -63,6 +63,11 @@ export function AppShell({ children }: PropsWithChildren) {
         </div>
       </header>
       <main className="app-main">{children}</main>
+      <footer className="app-footnote">
+        <a href="https://github.com/hyi96/taskweb" target="_blank" rel="noreferrer">
+          github repo
+        </a>
+      </footer>
     </div>
   );
 }
