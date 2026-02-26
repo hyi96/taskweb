@@ -49,6 +49,10 @@ export function ProfileProvider({ children }: PropsWithChildren) {
   const activeProfile = profiles.find((profile) => profile.id === profileId) ?? null;
 
   useEffect(() => {
+    // In cloud mode, avoid mutating persisted profile until auth/session is established.
+    if (isCloudMode && !isAuthenticated) {
+      return;
+    }
     if (profilesQuery.isLoading) {
       return;
     }
@@ -61,7 +65,7 @@ export function ProfileProvider({ children }: PropsWithChildren) {
       setProfileIdState(fallbackId);
       window.localStorage.setItem(STORAGE_KEY, fallbackId);
     }
-  }, [profilesQuery.isLoading, profiles, profileId]);
+  }, [isCloudMode, isAuthenticated, profilesQuery.isLoading, profiles, profileId]);
 
   const value = useMemo(
     () => ({
