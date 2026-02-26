@@ -9,16 +9,27 @@ from django.core.management.base import BaseCommand
 
 from core.models import InspirationalPhrase
 
-ZENQUOTES_ENDPOINT = "https://zenquotes.io/api/random"
+ZENQUOTES_RANDOM_ENDPOINT = "https://zenquotes.io/api/random"
+ZENQUOTES_BULK_ENDPOINTS = [
+    "https://zenquotes.io/api/quotes",
+    "https://zenquotes.io/api/quotes/100",
+]
 
 
-def _fetch_page(url: str, timeout: int, retries: int) -> dict:
+def _fetch_page(url: str, timeout: int, retries: int) -> object:
     last_error: Exception | None = None
     for attempt in range(retries):
         try:
             with urlopen(url, timeout=timeout) as response:
                 return json.loads(response.read().decode("utf-8"))
-        except (HTTPError, URLError, TimeoutError) as exc:
+        except HTTPError as exc:
+            last_error = exc
+            if exc.code == 429 and attempt < retries - 1:
+                time.sleep(5.0 + attempt * 2.0)
+                continue
+            if attempt < retries - 1:
+                time.sleep(1.0 + attempt * 0.5)
+        except (URLError, TimeoutError) as exc:
             last_error = exc
             if attempt < retries - 1:
                 time.sleep(1.0 + attempt * 0.5)
@@ -43,13 +54,23 @@ def parse_quotes_payload(payload: object) -> list[tuple[str, str]]:
 
 
 def fetch_from_zenquotes(*, target: int, timeout: int = 15, retries: int = 3, max_attempts: int = 2000) -> list[tuple[str, str]]:
+    # Try bulk endpoints first to avoid random-endpoint rate limits.
+    for endpoint in ZENQUOTES_BULK_ENDPOINTS:
+        try:
+            payload = _fetch_page(url=endpoint, timeout=timeout, retries=retries)
+            phrases = parse_quotes_payload(payload)
+            if phrases:
+                return phrases[:target]
+        except RuntimeError:
+            pass
+
     phrases: list[tuple[str, str]] = []
     seen: set[str] = set()
     attempts = 0
 
     while len(phrases) < target and attempts < max_attempts:
         attempts += 1
-        payload = _fetch_page(url=ZENQUOTES_ENDPOINT, timeout=timeout, retries=retries)
+        payload = _fetch_page(url=ZENQUOTES_RANDOM_ENDPOINT, timeout=timeout, retries=retries)
         batch = parse_quotes_payload(payload)
         if not batch:
             continue
@@ -60,6 +81,7 @@ def fetch_from_zenquotes(*, target: int, timeout: int = 15, retries: int = 3, ma
             continue
         seen.add(key)
         phrases.append((content, author))
+        time.sleep(0.15)
 
     if not phrases:
         raise RuntimeError("Failed to fetch quotes from ZenQuotes.")
