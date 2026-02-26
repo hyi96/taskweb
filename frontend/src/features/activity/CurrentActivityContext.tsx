@@ -1,7 +1,8 @@
 import { useQueryClient } from "@tanstack/react-query";
 import type { PropsWithChildren } from "react";
 import { createContext, useContext, useEffect, useRef, useState } from "react";
-import { createActivityDurationLog, queueActivityDurationLog } from "../../shared/repositories/client";
+import { createActivityDurationLog, dailyComplete, queueActivityDurationLog } from "../../shared/repositories/client";
+import type { Task } from "../../shared/types/task";
 import { useProfileContext } from "../profiles/ProfileContext";
 
 type CurrentActivityTarget = {
@@ -28,6 +29,7 @@ export function CurrentActivityProvider({ children }: PropsWithChildren) {
   const queryClient = useQueryClient();
   const previousProfileIdRef = useRef<string>("");
   const unloadFlushedRef = useRef(false);
+  const autoCompletedThisRunRef = useRef(false);
   const runStartedAtMsRef = useRef<number | null>(null);
   const elapsedAtRunStartRef = useRef(0);
   const [title, setTitle] = useState("");
@@ -42,6 +44,33 @@ export function CurrentActivityProvider({ children }: PropsWithChildren) {
     }
     const deltaSeconds = Math.max(0, Math.floor((Date.now() - runStartedAtMsRef.current) / 1000));
     return elapsedAtRunStartRef.current + deltaSeconds;
+  };
+
+  const parseDurationSeconds = (value: string | null | undefined) => {
+    if (!value) {
+      return 0;
+    }
+    const trimmed = value.trim();
+    if (!trimmed) {
+      return 0;
+    }
+
+    const daySplit = trimmed.split(" ");
+    let days = 0;
+    let timePart = trimmed;
+    if (daySplit.length === 2 && /^\d+$/.test(daySplit[0])) {
+      days = Number(daySplit[0]);
+      timePart = daySplit[1];
+    }
+
+    const match = timePart.match(/^(\d+):(\d{2}):(\d{2})$/);
+    if (!match) {
+      return 0;
+    }
+    const hours = Number(match[1]);
+    const minutes = Number(match[2]);
+    const seconds = Number(match[3]);
+    return days * 24 * 3600 + hours * 3600 + minutes * 60 + seconds;
   };
 
   useEffect(() => {
@@ -95,6 +124,40 @@ export function CurrentActivityProvider({ children }: PropsWithChildren) {
     };
   }, [isRunning, elapsedSeconds, sessionStartSeconds, title, profileId, target]);
 
+  useEffect(() => {
+    if (!isRunning || !profileId || !target.taskId || autoCompletedThisRunRef.current) {
+      return;
+    }
+
+    const tasks = queryClient.getQueryData<Task[]>(["tasks", profileId]) ?? [];
+    const currentTask = tasks.find((task) => task.id === target.taskId);
+    if (!currentTask || currentTask.task_type !== "daily") {
+      return;
+    }
+
+    const thresholdSeconds = parseDurationSeconds(currentTask.autocomplete_time_threshold);
+    if (thresholdSeconds <= 0) {
+      return;
+    }
+
+    const sessionSeconds = Math.max(0, getElapsedNow() - sessionStartSeconds);
+    if (sessionSeconds < thresholdSeconds) {
+      return;
+    }
+
+    autoCompletedThisRunRef.current = true;
+    void (async () => {
+      try {
+        await dailyComplete(currentTask.id, profileId);
+        void queryClient.invalidateQueries({ queryKey: ["tasks", profileId] });
+        void queryClient.invalidateQueries({ queryKey: ["logs", profileId] });
+        void queryClient.invalidateQueries({ queryKey: ["profiles"] });
+      } catch {
+        // Keep timer flow resilient; if completion fails, do not interrupt activity tracking.
+      }
+    })();
+  }, [isRunning, elapsedSeconds, profileId, sessionStartSeconds, target.taskId, queryClient]);
+
   const logSession = async (targetProfileId: string, durationSeconds: number, titleText: string, logTarget: CurrentActivityTarget) => {
     if (!targetProfileId || !titleText.trim() || durationSeconds <= 0) {
       return;
@@ -129,6 +192,7 @@ export function CurrentActivityProvider({ children }: PropsWithChildren) {
       setIsRunning(false);
       setElapsedSeconds(0);
       setSessionStartSeconds(0);
+      autoCompletedThisRunRef.current = false;
       runStartedAtMsRef.current = null;
       elapsedAtRunStartRef.current = 0;
       setTitle("");
@@ -143,6 +207,7 @@ export function CurrentActivityProvider({ children }: PropsWithChildren) {
       return;
     }
     unloadFlushedRef.current = false;
+    autoCompletedThisRunRef.current = false;
     elapsedAtRunStartRef.current = elapsedSeconds;
     runStartedAtMsRef.current = Date.now();
     setSessionStartSeconds(elapsedSeconds);
@@ -157,6 +222,7 @@ export function CurrentActivityProvider({ children }: PropsWithChildren) {
     setIsRunning(false);
     setElapsedSeconds(elapsedNow);
     unloadFlushedRef.current = false;
+    autoCompletedThisRunRef.current = false;
     runStartedAtMsRef.current = null;
     elapsedAtRunStartRef.current = 0;
     const sessionSeconds = Math.max(0, elapsedNow - sessionStartSeconds);
@@ -173,6 +239,7 @@ export function CurrentActivityProvider({ children }: PropsWithChildren) {
       setIsRunning(false);
       setElapsedSeconds(elapsedNow);
       unloadFlushedRef.current = false;
+      autoCompletedThisRunRef.current = false;
       runStartedAtMsRef.current = null;
       elapsedAtRunStartRef.current = 0;
       const sessionSeconds = Math.max(0, elapsedNow - sessionStartSeconds);
@@ -184,6 +251,7 @@ export function CurrentActivityProvider({ children }: PropsWithChildren) {
     }
     setElapsedSeconds(0);
     setSessionStartSeconds(0);
+    autoCompletedThisRunRef.current = false;
   };
 
   const remove = async () => {
@@ -192,6 +260,7 @@ export function CurrentActivityProvider({ children }: PropsWithChildren) {
       setIsRunning(false);
       setElapsedSeconds(elapsedNow);
       unloadFlushedRef.current = false;
+      autoCompletedThisRunRef.current = false;
       runStartedAtMsRef.current = null;
       elapsedAtRunStartRef.current = 0;
       const sessionSeconds = Math.max(0, elapsedNow - sessionStartSeconds);
@@ -203,6 +272,7 @@ export function CurrentActivityProvider({ children }: PropsWithChildren) {
     }
     setElapsedSeconds(0);
     setSessionStartSeconds(0);
+    autoCompletedThisRunRef.current = false;
     setTitle("");
     setTarget({});
   };
@@ -219,11 +289,13 @@ export function CurrentActivityProvider({ children }: PropsWithChildren) {
       setIsRunning(false);
       setElapsedSeconds(elapsedNow);
       unloadFlushedRef.current = false;
+      autoCompletedThisRunRef.current = false;
       runStartedAtMsRef.current = null;
       elapsedAtRunStartRef.current = 0;
     }
     setElapsedSeconds(0);
     setSessionStartSeconds(0);
+    autoCompletedThisRunRef.current = false;
     setTitle(nextTitle ?? "");
     setTarget(nextTarget ?? {});
   };
