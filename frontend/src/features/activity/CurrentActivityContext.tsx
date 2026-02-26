@@ -28,18 +28,43 @@ export function CurrentActivityProvider({ children }: PropsWithChildren) {
   const queryClient = useQueryClient();
   const previousProfileIdRef = useRef<string>("");
   const unloadFlushedRef = useRef(false);
+  const runStartedAtMsRef = useRef<number | null>(null);
+  const elapsedAtRunStartRef = useRef(0);
   const [title, setTitle] = useState("");
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [isRunning, setIsRunning] = useState(false);
   const [sessionStartSeconds, setSessionStartSeconds] = useState(0);
   const [target, setTarget] = useState<CurrentActivityTarget>({});
 
+  const getElapsedNow = () => {
+    if (!isRunning || runStartedAtMsRef.current === null) {
+      return elapsedSeconds;
+    }
+    const deltaSeconds = Math.max(0, Math.floor((Date.now() - runStartedAtMsRef.current) / 1000));
+    return elapsedAtRunStartRef.current + deltaSeconds;
+  };
+
   useEffect(() => {
     if (!isRunning) {
       return;
     }
-    const id = window.setInterval(() => setElapsedSeconds((current) => current + 1), 1000);
-    return () => window.clearInterval(id);
+
+    const syncElapsed = () => {
+      setElapsedSeconds(getElapsedNow());
+    };
+
+    syncElapsed();
+    const id = window.setInterval(syncElapsed, 1000);
+    const onVisibilityChange = () => {
+      if (!document.hidden) {
+        syncElapsed();
+      }
+    };
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    return () => {
+      window.clearInterval(id);
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+    };
   }, [isRunning]);
 
   useEffect(() => {
@@ -47,7 +72,8 @@ export function CurrentActivityProvider({ children }: PropsWithChildren) {
       if (unloadFlushedRef.current || !isRunning) {
         return;
       }
-      const sessionSeconds = Math.max(0, elapsedSeconds - sessionStartSeconds);
+      const elapsedNow = getElapsedNow();
+      const sessionSeconds = Math.max(0, elapsedNow - sessionStartSeconds);
       if (!title.trim() || sessionSeconds <= 0 || !profileId) {
         return;
       }
@@ -92,7 +118,8 @@ export function CurrentActivityProvider({ children }: PropsWithChildren) {
 
     const finalizeSwitch = async () => {
       if (isRunning) {
-        const sessionSeconds = Math.max(0, elapsedSeconds - sessionStartSeconds);
+        const elapsedNow = getElapsedNow();
+        const sessionSeconds = Math.max(0, elapsedNow - sessionStartSeconds);
         try {
           await logSession(previousProfileId, sessionSeconds, title, target);
         } catch {
@@ -102,6 +129,8 @@ export function CurrentActivityProvider({ children }: PropsWithChildren) {
       setIsRunning(false);
       setElapsedSeconds(0);
       setSessionStartSeconds(0);
+      runStartedAtMsRef.current = null;
+      elapsedAtRunStartRef.current = 0;
       setTitle("");
       setTarget({});
     };
@@ -114,6 +143,8 @@ export function CurrentActivityProvider({ children }: PropsWithChildren) {
       return;
     }
     unloadFlushedRef.current = false;
+    elapsedAtRunStartRef.current = elapsedSeconds;
+    runStartedAtMsRef.current = Date.now();
     setSessionStartSeconds(elapsedSeconds);
     setIsRunning(true);
   };
@@ -122,9 +153,13 @@ export function CurrentActivityProvider({ children }: PropsWithChildren) {
     if (!isRunning) {
       return;
     }
+    const elapsedNow = getElapsedNow();
     setIsRunning(false);
+    setElapsedSeconds(elapsedNow);
     unloadFlushedRef.current = false;
-    const sessionSeconds = Math.max(0, elapsedSeconds - sessionStartSeconds);
+    runStartedAtMsRef.current = null;
+    elapsedAtRunStartRef.current = 0;
+    const sessionSeconds = Math.max(0, elapsedNow - sessionStartSeconds);
     try {
       await logSession(profileId, sessionSeconds, title, target);
     } catch {
@@ -134,9 +169,13 @@ export function CurrentActivityProvider({ children }: PropsWithChildren) {
 
   const reset = async () => {
     if (isRunning) {
+      const elapsedNow = getElapsedNow();
       setIsRunning(false);
+      setElapsedSeconds(elapsedNow);
       unloadFlushedRef.current = false;
-      const sessionSeconds = Math.max(0, elapsedSeconds - sessionStartSeconds);
+      runStartedAtMsRef.current = null;
+      elapsedAtRunStartRef.current = 0;
+      const sessionSeconds = Math.max(0, elapsedNow - sessionStartSeconds);
       try {
         await logSession(profileId, sessionSeconds, title, target);
       } catch {
@@ -149,9 +188,13 @@ export function CurrentActivityProvider({ children }: PropsWithChildren) {
 
   const remove = async () => {
     if (isRunning) {
+      const elapsedNow = getElapsedNow();
       setIsRunning(false);
+      setElapsedSeconds(elapsedNow);
       unloadFlushedRef.current = false;
-      const sessionSeconds = Math.max(0, elapsedSeconds - sessionStartSeconds);
+      runStartedAtMsRef.current = null;
+      elapsedAtRunStartRef.current = 0;
+      const sessionSeconds = Math.max(0, elapsedNow - sessionStartSeconds);
       try {
         await logSession(profileId, sessionSeconds, title, target);
       } catch {
@@ -166,14 +209,18 @@ export function CurrentActivityProvider({ children }: PropsWithChildren) {
 
   const setCurrentActivity = async (nextTitle: string, nextTarget?: CurrentActivityTarget) => {
     if (isRunning) {
-      const sessionSeconds = Math.max(0, elapsedSeconds - sessionStartSeconds);
+      const elapsedNow = getElapsedNow();
+      const sessionSeconds = Math.max(0, elapsedNow - sessionStartSeconds);
       try {
         await logSession(profileId, sessionSeconds, title, target);
       } catch {
         // Keep current-activity switching responsive even when logging fails.
       }
       setIsRunning(false);
+      setElapsedSeconds(elapsedNow);
       unloadFlushedRef.current = false;
+      runStartedAtMsRef.current = null;
+      elapsedAtRunStartRef.current = 0;
     }
     setElapsedSeconds(0);
     setSessionStartSeconds(0);
