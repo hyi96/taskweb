@@ -852,6 +852,16 @@ body {
     gap: 12px;
   }
 
+  .brand {
+    min-height: 0;
+  }
+
+  .daily-phrase-text {
+    font-size: clamp(15px, 4.8vw, 20px);
+    line-height: 1.2;
+    margin: 0;
+  }
+
   .header-controls {
     flex-direction: column;
   }
