@@ -31,7 +31,7 @@ ensure_node_20() {
   fi
 
   local major
-  major="$(node -p 'process.versions.node.split(\".\")[0]')"
+  major="$(node -p 'process.versions.node.split(".")[0]')"
   if [[ "$major" -lt 20 ]]; then
     echo "Node 20+ required for frontend build. Current: $(node -v)"
     echo "If using nvm: nvm install 20 && nvm use 20"
