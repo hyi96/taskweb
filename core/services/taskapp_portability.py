@@ -9,6 +9,7 @@ from dataclasses import dataclass
 from datetime import date, datetime, timedelta, timezone as dt_timezone
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 from django.core.exceptions import ValidationError
 from django.db import transaction
@@ -42,11 +43,28 @@ def _iso_datetime(value: datetime | None) -> str | None:
     return value.astimezone(dt_timezone.utc).isoformat().replace("+00:00", "Z")
 
 
-def _parse_datetime(value: str | None) -> datetime | None:
+def _parse_datetime(
+    value: str | None,
+    *,
+    interpret_as_wall_time_tz: ZoneInfo | None = None,
+) -> datetime | None:
     if not value:
         return None
     # TaskApp stores up to 7 fractional second digits; Python expects <= 6.
     cleaned = re.sub(r"\.(\d{6})\d+(?=(Z|[+-]\d{2}:\d{2})$)", r".\1", value)
+
+    # Some TaskApp exports carry a fixed offset that drifts around DST boundaries.
+    # For due dates, prefer the importing browser's timezone wall-time when provided.
+    if interpret_as_wall_time_tz is not None:
+        wall_source = re.sub(r"(Z|[+-]\d{2}:\d{2})$", "", cleaned)
+        try:
+            wall = datetime.fromisoformat(wall_source)
+            if timezone.is_naive(wall):
+                wall = wall.replace(tzinfo=interpret_as_wall_time_tz)
+            return wall.astimezone(dt_timezone.utc)
+        except ValueError:
+            pass
+
     try:
         parsed = datetime.fromisoformat(cleaned.replace("Z", "+00:00"))
     except ValueError:
@@ -134,7 +152,14 @@ class TaskAppPortabilityService:
         return payload.getvalue(), filename
 
     @classmethod
-    def import_profile_archive(cls, *, profile: Profile, user, archive_file) -> dict:
+    def import_profile_archive(
+        cls,
+        *,
+        profile: Profile,
+        user,
+        archive_file,
+        import_timezone: str | None = None,
+    ) -> dict:
         _ensure_owner(profile, user)
 
         try:
@@ -151,7 +176,12 @@ class TaskAppPortabilityService:
 
         with transaction.atomic():
             locked_profile = Profile.objects.select_for_update().get(id=profile.id)
-            result = cls._import_bundle(locked_profile, bundle, logs_rows)
+            result = cls._import_bundle(
+                locked_profile,
+                bundle,
+                logs_rows,
+                import_timezone=import_timezone,
+            )
 
         return result
 
@@ -363,7 +393,21 @@ class TaskAppPortabilityService:
                 connection.close()
 
     @classmethod
-    def _import_bundle(cls, profile: Profile, bundle: _ImportBundle, logs_rows: list[dict]) -> dict:
+    def _import_bundle(
+        cls,
+        profile: Profile,
+        bundle: _ImportBundle,
+        logs_rows: list[dict],
+        *,
+        import_timezone: str | None = None,
+    ) -> dict:
+        wall_time_tz: ZoneInfo | None = None
+        if import_timezone:
+            try:
+                wall_time_tz = ZoneInfo(import_timezone)
+            except Exception:
+                wall_time_tz = None
+
         imported_counts = {
             "tags": 0,
             "tasks": 0,
@@ -394,7 +438,13 @@ class TaskAppPortabilityService:
                 imported_counts["tags"] += 1
 
         for task_payload in bundle.tasks or []:
-            task = cls._import_task(profile, task_payload, tag_id_map, imported_counts)
+            task = cls._import_task(
+                profile,
+                task_payload,
+                tag_id_map,
+                imported_counts,
+                due_wall_time_tz=wall_time_tz,
+            )
             if task:
                 old_id = str(task_payload.get("Id") or "")
                 if old_id:
@@ -512,7 +562,15 @@ class TaskAppPortabilityService:
             task.tags.set(attached)
 
     @classmethod
-    def _import_task(cls, profile: Profile, payload: dict, tag_id_map: dict[str, Tag], imported_counts: dict) -> Task | None:
+    def _import_task(
+        cls,
+        profile: Profile,
+        payload: dict,
+        tag_id_map: dict[str, Tag],
+        imported_counts: dict,
+        *,
+        due_wall_time_tz: ZoneInfo | None = None,
+    ) -> Task | None:
         task_type = cls._task_payload_type(payload)
         mapped_type = {
             "todo": Task.TaskType.TODO,
@@ -538,7 +596,10 @@ class TaskAppPortabilityService:
         )
 
         if mapped_type == Task.TaskType.TODO:
-            task.due_at = _parse_datetime(payload.get("DueDate"))
+            task.due_at = _parse_datetime(
+                payload.get("DueDate"),
+                interpret_as_wall_time_tz=due_wall_time_tz,
+            )
             completed_at = _parse_datetime(payload.get("LastCompletedDate"))
             task.is_done = completed_at is not None
             task.completed_at = completed_at

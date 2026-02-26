@@ -54,6 +54,10 @@ export async function exportProfileTaskApp(profileId: string): Promise<Blob> {
 export async function importProfileTaskApp(profileId: string, file: File): Promise<TaskAppImportResult> {
   const formData = new FormData();
   formData.append("file", file);
+  const browserTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  if (browserTimezone) {
+    formData.append("timezone", browserTimezone);
+  }
   return apiRequest<TaskAppImportResult>(`/api/profiles/${profileId}/import-taskapp/`, {
     method: "POST",
     body: formData

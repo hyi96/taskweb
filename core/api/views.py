@@ -192,11 +192,15 @@ class ProfileViewSet(viewsets.ModelViewSet):
         upload = request.FILES.get("file")
         if upload is None:
             raise ValidationError({"file": "This file field is required."})
+        import_timezone = request.data.get("timezone")
+        if import_timezone is not None:
+            import_timezone = str(import_timezone).strip() or None
         try:
             result = TaskAppPortabilityService.import_profile_archive(
                 profile=profile,
                 user=request.user,
                 archive_file=upload,
+                import_timezone=import_timezone,
             )
         except DjangoValidationError as exc:
             raise _to_drf_validation_error(exc) from exc
