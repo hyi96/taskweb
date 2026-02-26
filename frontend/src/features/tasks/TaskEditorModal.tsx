@@ -47,9 +47,9 @@ function toDatetimeLocal(value: string | null) {
     return "";
   }
   const pad = (n: number) => String(n).padStart(2, "0");
-  return `${date.getUTCFullYear()}-${pad(date.getUTCMonth() + 1)}-${pad(date.getUTCDate())}T${pad(
-    date.getUTCHours()
-  )}:${pad(date.getUTCMinutes())}`;
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(
+    date.getMinutes()
+  )}`;
 }
 
 function toIsoUtcFromDatetimeLocal(value: string) {
@@ -63,7 +63,8 @@ function toIsoUtcFromDatetimeLocal(value: string) {
   const day = Number(d);
   const hour = Number(hh);
   const minute = Number(mm);
-  return new Date(Date.UTC(year, month, day, hour, minute, 0, 0)).toISOString();
+  // Interpret date/time picker values in the user's local timezone, then persist as UTC ISO.
+  return new Date(year, month, day, hour, minute, 0, 0).toISOString();
 }
 
 function toTodoDueParts(value: string | null) {

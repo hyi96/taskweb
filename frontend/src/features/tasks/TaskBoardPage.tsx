@@ -353,8 +353,8 @@ export function formatDailyDueText(task: Task) {
 
 export function formatTodoDueText(dueAt: string) {
   const due = new Date(dueAt);
-  const dateLabel = due.toLocaleDateString(undefined, { month: "short", day: "numeric", timeZone: "UTC" });
-  const timeLabel = due.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit", timeZone: "UTC" });
+  const dateLabel = due.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+  const timeLabel = due.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
   return `Due ${dateLabel} ${timeLabel}`;
 }
 
