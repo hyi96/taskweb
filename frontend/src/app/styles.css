@@ -197,7 +197,7 @@ body {
 
 .app-footnote {
   margin-top: 10px;
-  text-align: right;
+  text-align: center;
   font-size: 12px;
   color: #6a7489;
 }
@@ -856,8 +856,8 @@ body {
     min-height: 0;
   }
 
-  .daily-phrase-text {
-    font-size: clamp(15px, 4.8vw, 20px);
+  .brand .daily-phrase-text {
+    font-size: 16px;
     line-height: 1.2;
     margin: 0;
   }
@@ -882,5 +882,12 @@ body {
   .activity-panel {
     min-width: 0;
     max-width: unset;
+  }
+}
+
+@media (max-width: 900px) {
+  .brand .daily-phrase-text {
+    font-size: clamp(16px, 3.8vw, 22px);
+    line-height: 1.22;
   }
 }
