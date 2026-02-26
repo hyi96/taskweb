@@ -3,18 +3,13 @@ from __future__ import annotations
 import json
 import time
 from urllib.error import HTTPError, URLError
-from urllib.parse import urlencode
 from urllib.request import urlopen
 
 from django.core.management.base import BaseCommand
 
 from core.models import InspirationalPhrase
 
-QUOTABLE_ENDPOINTS = [
-    "https://api.quotable.io/quotes",
-    "http://api.quotable.io/quotes",
-]
-DEFAULT_TAGS = "inspirational|wisdom|success"
+ZENQUOTES_ENDPOINT = "https://zenquotes.io/api/random"
 
 
 def _fetch_page(url: str, timeout: int, retries: int) -> dict:
@@ -31,60 +26,44 @@ def _fetch_page(url: str, timeout: int, retries: int) -> dict:
 
 
 def parse_quotes_payload(payload: object) -> list[tuple[str, str]]:
-    rows: list[dict] = []
-    if isinstance(payload, dict):
-        results = payload.get("results")
-        if isinstance(results, list):
-            rows = [item for item in results if isinstance(item, dict)]
-    elif isinstance(payload, list):
-        rows = [item for item in payload if isinstance(item, dict)]
-
+    rows: list[dict] = [item for item in payload if isinstance(item, dict)] if isinstance(payload, list) else []
     phrases: list[tuple[str, str]] = []
     seen: set[str] = set()
     for row in rows:
-        content = str(row.get("content", "")).strip()
+        content = str(row.get("q", "")).strip()
         if not content:
             continue
         key = content.lower()
         if key in seen:
             continue
         seen.add(key)
-        author = str(row.get("author", "")).strip() or "Unknown"
+        author = str(row.get("a", "")).strip() or "Unknown"
         phrases.append((content, author[:120]))
     return phrases
 
 
-def fetch_from_quotable(*, target: int, tags: str, page_size: int = 50, timeout: int = 15, retries: int = 3) -> list[tuple[str, str]]:
-    for endpoint in QUOTABLE_ENDPOINTS:
-        page = 1
-        phrases: list[tuple[str, str]] = []
-        seen: set[str] = set()
-        try:
-            while len(phrases) < target:
-                params = urlencode({"page": page, "limit": page_size, "tags": tags})
-                url = f"{endpoint}?{params}"
-                payload = _fetch_page(url=url, timeout=timeout, retries=retries)
-                results = payload.get("results", [])
-                if not results:
-                    break
+def fetch_from_zenquotes(*, target: int, timeout: int = 15, retries: int = 3, max_attempts: int = 2000) -> list[tuple[str, str]]:
+    phrases: list[tuple[str, str]] = []
+    seen: set[str] = set()
+    attempts = 0
 
-                batch = parse_quotes_payload(results)
-                for content, author in batch:
-                    key = content.lower()
-                    if key in seen:
-                        continue
-                    seen.add(key)
-                    phrases.append((content, author))
-                    if len(phrases) >= target:
-                        break
-                page += 1
-        except RuntimeError:
-            phrases = []
+    while len(phrases) < target and attempts < max_attempts:
+        attempts += 1
+        payload = _fetch_page(url=ZENQUOTES_ENDPOINT, timeout=timeout, retries=retries)
+        batch = parse_quotes_payload(payload)
+        if not batch:
+            continue
 
-        if phrases:
-            return phrases[:target]
+        content, author = batch[0]
+        key = content.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        phrases.append((content, author))
 
-    raise RuntimeError("Failed to fetch quotes from Quotable using both HTTPS and HTTP endpoints.")
+    if not phrases:
+        raise RuntimeError("Failed to fetch quotes from ZenQuotes.")
+    return phrases[:target]
 
 
 class Command(BaseCommand):
@@ -108,24 +87,24 @@ class Command(BaseCommand):
             help="Confirm destructive operations (required with --replace).",
         )
         parser.add_argument(
-            "--tags",
-            type=str,
-            default=DEFAULT_TAGS,
-            help="Quotable tags filter (pipe-separated).",
+            "--max-attempts",
+            type=int,
+            default=2000,
+            help="Maximum API calls while collecting unique quotes.",
         )
 
     def handle(self, *args, **options):
         target = max(1, int(options["target"]))
         replace = bool(options["replace"])
         confirm = bool(options["yes"])
-        tags = str(options["tags"]).strip() or DEFAULT_TAGS
+        max_attempts = max(1, int(options["max_attempts"]))
 
         if replace and not confirm:
             self.stderr.write("Refusing to run --replace without --yes confirmation.")
             self.stderr.write("Re-run with: --replace --yes")
             return
 
-        phrase_bank = fetch_from_quotable(target=target, tags=tags)
+        phrase_bank = fetch_from_zenquotes(target=target, max_attempts=max_attempts)
         if not phrase_bank:
             self.stdout.write(self.style.WARNING("No phrases loaded; no changes applied."))
             return
