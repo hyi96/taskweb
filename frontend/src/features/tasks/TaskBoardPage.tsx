@@ -66,8 +66,8 @@ const REWARD_SORTS = [
   "Name (Z-A)",
   "Created time (new to old)",
   "Created time (old to new)",
-  "Gold value (high to low)",
-  "Gold value (low to high)"
+  "Gold cost (high to low)",
+  "Gold cost (low to high)"
 ] as const;
 
 type SortLabel = (typeof HABIT_SORTS | typeof DAILY_SORTS | typeof TODO_SORTS | typeof REWARD_SORTS)[number];
@@ -131,6 +131,15 @@ function loadStoredSortModes(profileId: string): {
       todoSort?: string;
       rewardSort?: string;
     };
+    const normalizeRewardSort = (value?: string) => {
+      if (value === "Gold value (high to low)") {
+        return "Gold cost (high to low)";
+      }
+      if (value === "Gold value (low to high)") {
+        return "Gold cost (low to high)";
+      }
+      return value;
+    };
     const habitSort = HABIT_SORTS.includes(parsed.habitSort as (typeof HABIT_SORTS)[number])
       ? (parsed.habitSort as (typeof HABIT_SORTS)[number])
       : "Name (A-Z)";
@@ -140,8 +149,9 @@ function loadStoredSortModes(profileId: string): {
     const todoSort = TODO_SORTS.includes(parsed.todoSort as (typeof TODO_SORTS)[number])
       ? (parsed.todoSort as (typeof TODO_SORTS)[number])
       : "Name (A-Z)";
-    const rewardSort = REWARD_SORTS.includes(parsed.rewardSort as (typeof REWARD_SORTS)[number])
-      ? (parsed.rewardSort as (typeof REWARD_SORTS)[number])
+    const rewardSortCandidate = normalizeRewardSort(parsed.rewardSort);
+    const rewardSort = REWARD_SORTS.includes(rewardSortCandidate as (typeof REWARD_SORTS)[number])
+      ? (rewardSortCandidate as (typeof REWARD_SORTS)[number])
       : "Name (A-Z)";
     return { habitSort, dailySort, todoSort, rewardSort };
   } catch {
@@ -217,6 +227,10 @@ export function sortTasks(tasks: Task[], sortMode: SortLabel) {
         return toNumber(b.gold_delta) - toNumber(a.gold_delta);
       case "Gold value (low to high)":
         return toNumber(a.gold_delta) - toNumber(b.gold_delta);
+      case "Gold cost (high to low)":
+        return Math.abs(toNumber(b.gold_delta)) - Math.abs(toNumber(a.gold_delta));
+      case "Gold cost (low to high)":
+        return Math.abs(toNumber(a.gold_delta)) - Math.abs(toNumber(b.gold_delta));
       case "Count (high to low)":
         return toNumber(b.current_count) - toNumber(a.current_count);
       case "Count (low to high)":
