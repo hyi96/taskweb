@@ -72,6 +72,8 @@ const REWARD_SORTS = [
 
 type SortLabel = (typeof HABIT_SORTS | typeof DAILY_SORTS | typeof TODO_SORTS | typeof REWARD_SORTS)[number];
 
+const SORTS_STORAGE_KEY_PREFIX = "taskweb.task_sorts";
+
 type EditorPayload = {
   profile_id?: string;
   task_type?: Task["task_type"];
@@ -103,6 +105,63 @@ export function localDateString() {
   const month = String(now.getMonth() + 1).padStart(2, "0");
   const day = String(now.getDate()).padStart(2, "0");
   return `${year}-${month}-${day}`;
+}
+
+function taskSortsStorageKey(profileId: string) {
+  return `${SORTS_STORAGE_KEY_PREFIX}.${profileId}`;
+}
+
+function loadStoredSortModes(profileId: string): {
+  habitSort: (typeof HABIT_SORTS)[number];
+  dailySort: (typeof DAILY_SORTS)[number];
+  todoSort: (typeof TODO_SORTS)[number];
+  rewardSort: (typeof REWARD_SORTS)[number];
+} | null {
+  if (typeof window === "undefined" || !profileId) {
+    return null;
+  }
+  const raw = window.localStorage.getItem(taskSortsStorageKey(profileId));
+  if (!raw) {
+    return null;
+  }
+  try {
+    const parsed = JSON.parse(raw) as {
+      habitSort?: string;
+      dailySort?: string;
+      todoSort?: string;
+      rewardSort?: string;
+    };
+    const habitSort = HABIT_SORTS.includes(parsed.habitSort as (typeof HABIT_SORTS)[number])
+      ? (parsed.habitSort as (typeof HABIT_SORTS)[number])
+      : "Name (A-Z)";
+    const dailySort = DAILY_SORTS.includes(parsed.dailySort as (typeof DAILY_SORTS)[number])
+      ? (parsed.dailySort as (typeof DAILY_SORTS)[number])
+      : "Name (A-Z)";
+    const todoSort = TODO_SORTS.includes(parsed.todoSort as (typeof TODO_SORTS)[number])
+      ? (parsed.todoSort as (typeof TODO_SORTS)[number])
+      : "Name (A-Z)";
+    const rewardSort = REWARD_SORTS.includes(parsed.rewardSort as (typeof REWARD_SORTS)[number])
+      ? (parsed.rewardSort as (typeof REWARD_SORTS)[number])
+      : "Name (A-Z)";
+    return { habitSort, dailySort, todoSort, rewardSort };
+  } catch {
+    return null;
+  }
+}
+
+function storeSortModes(
+  profileId: string,
+  sorts: {
+    habitSort: (typeof HABIT_SORTS)[number];
+    dailySort: (typeof DAILY_SORTS)[number];
+    todoSort: (typeof TODO_SORTS)[number];
+    rewardSort: (typeof REWARD_SORTS)[number];
+  }
+) {
+  if (typeof window === "undefined" || !profileId) {
+    return;
+  }
+  window.localStorage.setItem(taskSortsStorageKey(profileId), JSON.stringify(sorts));
 }
 
 function newDaySeenStorageKey(profileId: string, day: string) {
@@ -533,6 +592,25 @@ export function TaskBoardPage() {
     setCheckedNewDayIds([]);
     checkedNewDayIdsRef.current = [];
   }, [profileId]);
+
+  useEffect(() => {
+    const stored = loadStoredSortModes(profileId);
+    if (!stored) {
+      setHabitSort("Name (A-Z)");
+      setDailySort("Name (A-Z)");
+      setTodoSort("Name (A-Z)");
+      setRewardSort("Name (A-Z)");
+      return;
+    }
+    setHabitSort(stored.habitSort);
+    setDailySort(stored.dailySort);
+    setTodoSort(stored.todoSort);
+    setRewardSort(stored.rewardSort);
+  }, [profileId]);
+
+  useEffect(() => {
+    storeSortModes(profileId, { habitSort, dailySort, todoSort, rewardSort });
+  }, [profileId, habitSort, dailySort, todoSort, rewardSort]);
 
   useEffect(() => {
     if (!newDayItems.length) {
