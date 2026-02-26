@@ -5,6 +5,7 @@ from django.core.exceptions import ValidationError as DjangoValidationError
 from django.core.validators import validate_email
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404
+from django.utils import timezone
 from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import ensure_csrf_cookie
 from rest_framework import mixins, status, viewsets
@@ -29,6 +30,7 @@ from core.api.serializers import (
     TaskSerializer,
 )
 from core.models import ChecklistItem, LogEntry, Profile, StreakBonusRule, Tag, Task
+from core.services.site_phrase import get_daily_phrase
 from core.services.task_actions import (
     daily_complete,
     get_uncompleted_dailies_from_previous_period,
@@ -69,6 +71,22 @@ class SessionStatusView(APIView):
 
     def get(self, request):
         return Response(_session_payload(request), status=status.HTTP_200_OK)
+
+
+class DailyPhraseView(APIView):
+    permission_classes = [AllowAny]
+
+    def get(self, _request):
+        today = timezone.localdate().isoformat()
+        phrase = get_daily_phrase()
+        return Response(
+            {
+                "date": today,
+                "text": phrase["text"],
+                "author": phrase["author"],
+            },
+            status=status.HTTP_200_OK,
+        )
 
 
 class LoginView(APIView):

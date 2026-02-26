@@ -358,3 +358,24 @@ class LogEntry(models.Model):
                 errors["reward"] = "Reward must point to a task of type REWARD."
         if errors:
             raise ValidationError(errors)
+
+
+class InspirationalPhrase(models.Model):
+    """Site-wide phrase bank used for deterministic phrase-of-the-day selection."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    text = models.CharField(max_length=220, unique=True)
+    author = models.CharField(max_length=120, default="Unknown")
+    is_active = models.BooleanField(default=True)
+    sort_order = models.PositiveIntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["sort_order", "created_at", "id"]
+        indexes = [
+            models.Index(fields=["is_active", "sort_order", "created_at"]),
+        ]
+
+    def __str__(self) -> str:
+        return self.text

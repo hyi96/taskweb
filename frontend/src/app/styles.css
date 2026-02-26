@@ -90,6 +90,30 @@ body {
   color: #5b6477;
 }
 
+.brand {
+  display: flex;
+  flex-direction: column;
+  min-height: 98px;
+}
+
+.daily-phrase-label {
+  margin: 0 0 2px;
+  font-size: 11px;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+  color: #6a7489;
+}
+
+.daily-phrase-text {
+  font-family: "Cormorant Garamond", "Times New Roman", serif;
+  font-size: clamp(24px, 3vw, 34px);
+  font-style: italic;
+  letter-spacing: 0.02em;
+  font-weight: 600;
+  color: #1d2230;
+  text-shadow: 0 1px 0 #ffffff, 0 5px 18px rgba(20, 28, 50, 0.14);
+}
+
 .profile-selector {
   display: flex;
   flex-direction: column;

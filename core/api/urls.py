@@ -4,6 +4,7 @@ from rest_framework.routers import DefaultRouter
 from core.api.views import (
     ActivityDurationViewSet,
     CsrfCookieView,
+    DailyPhraseView,
     ChecklistItemViewSet,
     LoginView,
     LogEntryViewSet,
@@ -28,6 +29,7 @@ router.register("activity-duration", ActivityDurationViewSet, basename="activity
 router.register("new-day", NewDayViewSet, basename="new-day")
 
 urlpatterns = [
+    path("site/daily-phrase/", DailyPhraseView.as_view(), name="site-daily-phrase"),
     path("auth/csrf/", CsrfCookieView.as_view(), name="auth-csrf"),
     path("auth/session/", SessionStatusView.as_view(), name="auth-session"),
     path("auth/login/", LoginView.as_view(), name="auth-login"),

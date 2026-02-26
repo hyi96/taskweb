@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from core.models import ChecklistItem, LogEntry, Profile, StreakBonusRule, Tag, Task
+from core.models import ChecklistItem, InspirationalPhrase, LogEntry, Profile, StreakBonusRule, Tag, Task
 
 
 class ChecklistItemInline(admin.TabularInline):
@@ -72,3 +72,12 @@ class LogEntryAdmin(admin.ModelAdmin):
     list_filter = ("type", "created_at")
     search_fields = ("title_snapshot", "profile__name", "profile__account__username", "task__title")
     readonly_fields = ("id", "created_at")
+
+
+@admin.register(InspirationalPhrase)
+class InspirationalPhraseAdmin(admin.ModelAdmin):
+    list_display = ("id", "text", "author", "is_active", "sort_order", "created_at")
+    list_filter = ("is_active", "created_at")
+    search_fields = ("text", "author")
+    ordering = ("sort_order", "created_at")
+    readonly_fields = ("id", "created_at", "updated_at")

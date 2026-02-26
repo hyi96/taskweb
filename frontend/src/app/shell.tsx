@@ -1,20 +1,30 @@
 import type { PropsWithChildren } from "react";
 import { NavLink } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
 import { CurrentActivityPanel } from "../features/activity/CurrentActivityPanel";
 import { useAuthContext } from "../features/auth/AuthContext";
 import { setStorageMode, storageMode } from "../shared/repositories/client";
 import { ProfileSelector } from "../features/profiles/ProfileSelector";
+import { fetchDailyPhrase } from "../shared/api/site";
 
 export function AppShell({ children }: PropsWithChildren) {
   const { isCloudMode, username, logout } = useAuthContext();
   const isGuestMode = storageMode === "indexeddb";
+  const phraseQuery = useQuery({
+    queryKey: ["site", "daily-phrase"],
+    queryFn: fetchDailyPhrase,
+    staleTime: 60 * 60 * 1000,
+  });
+  const phraseText = phraseQuery.data?.text ?? "Build your day.";
+  const phraseAuthor = phraseQuery.data?.author ?? "Taskweb";
 
   return (
     <div className="app-shell">
       <header className="app-header">
         <div className="brand-and-nav">
           <div className="brand">
-            <h1>Taskweb</h1>
+            <div className="daily-phrase-label">Quote of the day</div>
+            <h1 className="daily-phrase-text">"{phraseText}" - {phraseAuthor}</h1>
           </div>
           <nav className="top-nav">
             <NavLink to="/tasks">Tasks</NavLink>
