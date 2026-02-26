@@ -488,6 +488,7 @@ export function TaskBoardPage() {
   const [showNewDayModal, setShowNewDayModal] = useState(false);
   const [checkedNewDayIds, setCheckedNewDayIds] = useState<string[]>([]);
   const checkedNewDayIdsRef = useRef<string[]>([]);
+  const sortsHydratedRef = useRef(false);
 
   const tasksQuery = useQuery({
     queryKey: tasksKey,
@@ -591,6 +592,7 @@ export function TaskBoardPage() {
     setShowNewDayModal(false);
     setCheckedNewDayIds([]);
     checkedNewDayIdsRef.current = [];
+    sortsHydratedRef.current = false;
   }, [profileId]);
 
   useEffect(() => {
@@ -600,15 +602,20 @@ export function TaskBoardPage() {
       setDailySort("Name (A-Z)");
       setTodoSort("Name (A-Z)");
       setRewardSort("Name (A-Z)");
+      sortsHydratedRef.current = true;
       return;
     }
     setHabitSort(stored.habitSort);
     setDailySort(stored.dailySort);
     setTodoSort(stored.todoSort);
     setRewardSort(stored.rewardSort);
+    sortsHydratedRef.current = true;
   }, [profileId]);
 
   useEffect(() => {
+    if (!sortsHydratedRef.current) {
+      return;
+    }
     storeSortModes(profileId, { habitSort, dailySort, todoSort, rewardSort });
   }, [profileId, habitSort, dailySort, todoSort, rewardSort]);
 

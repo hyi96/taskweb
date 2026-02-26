@@ -26,7 +26,7 @@ function readStoredProfileId() {
 }
 
 export function ProfileProvider({ children }: PropsWithChildren) {
-  const { isAuthenticated, isCloudMode, isAuthLoading } = useAuthContext();
+  const { isAuthenticated, isCloudMode } = useAuthContext();
   const [profileId, setProfileIdState] = useState<string>(readStoredProfileId);
 
   const profilesQuery = useQuery({
@@ -47,14 +47,6 @@ export function ProfileProvider({ children }: PropsWithChildren) {
 
   const profiles = profilesQuery.data ?? [];
   const activeProfile = profiles.find((profile) => profile.id === profileId) ?? null;
-
-  useEffect(() => {
-    // Avoid clearing persisted selection while cloud session is still resolving on page load.
-    if (isCloudMode && !isAuthLoading && !isAuthenticated) {
-      setProfileIdState("");
-      window.localStorage.setItem(STORAGE_KEY, "");
-    }
-  }, [isCloudMode, isAuthLoading, isAuthenticated]);
 
   useEffect(() => {
     if (profilesQuery.isLoading) {
