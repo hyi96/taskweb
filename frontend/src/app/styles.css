@@ -31,6 +31,11 @@ body {
   margin: 0 0 8px;
 }
 
+.auth-card h1 {
+  margin: 0 0 6px;
+  text-align: center;
+}
+
 .auth-card p {
   margin: 0 0 14px;
   color: #5b6477;

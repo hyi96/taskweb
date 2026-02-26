@@ -70,6 +70,7 @@ export function LoginPage() {
   return (
     <div className="auth-layout">
       <div className="auth-card">
+        <h1>taskweb</h1>
         <h2>{mode === "signup" ? "Sign up" : "Sign in"}</h2>
         <p>
           {mode === "signup"
