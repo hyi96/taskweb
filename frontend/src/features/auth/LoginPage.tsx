@@ -36,7 +36,7 @@ function authErrorMessage(error: unknown): string {
 
 export function LoginPage() {
   const { login, signup } = useAuthContext();
-  const { mode, setMode } = useTheme();
+  const { mode: themeMode, setMode: setThemeMode } = useTheme();
   const [mode, setMode] = useState<"login" | "signup">("login");
   const [username, setUsername] = useState("");
   const [email, setEmail] = useState("");
@@ -76,8 +76,8 @@ export function LoginPage() {
           <label htmlFor="auth-theme">Theme</label>
           <select
             id="auth-theme"
-            value={mode}
-            onChange={(event) => setMode(event.target.value as "system" | "light" | "dark")}
+            value={themeMode}
+            onChange={(event) => setThemeMode(event.target.value as "system" | "light" | "dark")}
             disabled={isSubmitting}
           >
             <option value="system">follow system</option>
