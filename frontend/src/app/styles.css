@@ -506,6 +506,7 @@ body {
   border-radius: 8px;
   padding: 6px 8px;
   background: #fff;
+  color: inherit;
   transition: border-color 0.12s ease, box-shadow 0.12s ease;
 }
 
@@ -1123,6 +1124,7 @@ body {
 :root[data-theme="dark"] .ghost-button,
 :root[data-theme="dark"] .card-menu-trigger,
 :root[data-theme="dark"] .card-menu-item,
+:root[data-theme="dark"] .column-header select,
 :root[data-theme="dark"] .graph-controls select,
 :root[data-theme="dark"] .logs-filters select,
 :root[data-theme="dark"] .logs-filters input,
@@ -1131,6 +1133,11 @@ body {
 :root[data-theme="dark"] .session-box select {
   background: #101827;
   border-color: #344766;
+  color: #dbe5f8;
+}
+
+:root[data-theme="dark"] .column-header select option {
+  background: #101827;
   color: #dbe5f8;
 }
 
