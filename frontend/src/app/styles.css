@@ -170,6 +170,8 @@ body {
   grid-template-columns: repeat(2, minmax(420px, 1fr));
   align-items: stretch;
   gap: 12px;
+  width: min(100%, 1080px);
+  margin-left: auto;
 }
 
 .header-right-column {

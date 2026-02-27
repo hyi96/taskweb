@@ -49,7 +49,7 @@ export function AppShell({ children }: PropsWithChildren) {
                 </div>
               ) : null}
               {isGuestMode ? (
-                <div className="session-box session-box-inline">
+                <div className="session-box">
                   <small>Guest mode (local storage)</small>
                   <button
                     type="button"
