@@ -705,6 +705,12 @@ body {
   gap: 8px;
   min-width: 0;
   flex-wrap: wrap;
+  padding-right: 42px;
+}
+
+.task-list li > strong {
+  display: block;
+  padding-right: 42px;
 }
 
 .completion-badge {
