@@ -163,15 +163,17 @@ body {
 }
 
 .header-controls {
-  display: flex;
-  align-items: flex-start;
+  display: grid;
+  grid-template-columns: minmax(320px, 1.35fr) minmax(260px, 1fr) minmax(220px, 0.9fr);
+  align-items: stretch;
   gap: 12px;
 }
 
 .header-side-stack {
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-rows: repeat(2, minmax(0, 1fr));
   gap: 12px;
+  height: 100%;
 }
 
 .session-box {
@@ -185,6 +187,7 @@ body {
   justify-content: space-between;
   gap: 8px;
   min-height: 0;
+  height: 100%;
 }
 
 .session-box select {
@@ -287,6 +290,7 @@ body {
   flex-direction: column;
   gap: 8px;
   min-height: 0;
+  height: 100%;
 }
 
 .activity-panel-head {
@@ -946,11 +950,14 @@ body {
   .header-controls {
     flex-direction: column;
     align-items: stretch;
+    display: flex;
   }
 
   .header-side-stack {
     flex-direction: column;
     gap: 8px;
+    display: flex;
+    height: auto;
   }
 
   .profile-selector {
