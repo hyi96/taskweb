@@ -221,6 +221,19 @@ export function TaskEditorModal({ profileId, task, onClose, onSubmit, onDelete }
 
   const titleText = isEdit ? `Edit ${taskType}` : "Create task";
   const lastActionText = useMemo(() => formatLastAction(task ?? null), [task]);
+  const checklistDisplay = useMemo(
+    () =>
+      checklistDraft
+        .map((item, index) => ({ item, index }))
+        .sort((a, b) => {
+          const byCompletion = Number(a.item.is_completed) - Number(b.item.is_completed);
+          if (byCompletion !== 0) {
+            return byCompletion;
+          }
+          return a.index - b.index;
+        }),
+    [checklistDraft]
+  );
 
   const validate = () => {
     if (!title.trim()) {
@@ -560,7 +573,7 @@ export function TaskEditorModal({ profileId, task, onClose, onSubmit, onDelete }
                   </button>
                 </div>
                 <ul className="nested-list">
-                  {checklistDraft.map((item, index) => (
+                  {checklistDisplay.map(({ item, index }) => (
                     <li key={`${item.text}-${index}`}>
                       <label className="checkbox-row">
                         <input
