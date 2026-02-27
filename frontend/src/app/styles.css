@@ -167,7 +167,7 @@ body {
 
 .header-controls {
   display: grid;
-  grid-template-columns: minmax(460px, 1.35fr) minmax(420px, 1fr);
+  grid-template-columns: repeat(2, minmax(420px, 1fr));
   align-items: stretch;
   gap: 12px;
 }
@@ -392,9 +392,9 @@ body {
 }
 
 .activity-actions button {
-  min-height: 42px;
-  padding: 10px 8px;
-  font-size: 19px;
+  min-height: 38px;
+  padding: 8px 8px;
+  font-size: 16px;
 }
 
 .tag-filter-row {
