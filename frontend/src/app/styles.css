@@ -4,12 +4,25 @@
   background: linear-gradient(145deg, #f6f8fb 0%, #eef2f9 100%);
 }
 
+:root[data-theme="light"] {
+  color-scheme: light;
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+}
+
 * {
   box-sizing: border-box;
 }
 
 body {
   margin: 0;
+}
+
+:root[data-theme="dark"] body {
+  color: #e3e9f5;
+  background: linear-gradient(145deg, #0f1422 0%, #121a2d 100%);
 }
 
 .auth-layout {
@@ -34,6 +47,24 @@ body {
 .auth-card h1 {
   margin: 0 0 6px;
   text-align: center;
+}
+
+.auth-theme-row {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+  color: #5b6477;
+  font-size: 13px;
+}
+
+.auth-theme-row select {
+  border: 1px solid #cad2e2;
+  border-radius: 8px;
+  background: #fff;
+  color: inherit;
+  padding: 6px 8px;
 }
 
 .auth-card p {
@@ -148,6 +179,14 @@ body {
   justify-content: space-between;
   gap: 8px;
   min-height: 146px;
+}
+
+.session-box select {
+  padding: 8px 10px;
+  border: 1px solid #cad2e2;
+  border-radius: 8px;
+  background: #fff;
+  color: inherit;
 }
 
 .profile-selector label {
@@ -919,4 +958,113 @@ body {
     font-size: clamp(16px, 3.8vw, 22px);
     line-height: 1.22;
   }
+}
+
+:root[data-theme="dark"] .auth-card,
+:root[data-theme="dark"] .app-main,
+:root[data-theme="dark"] .task-column,
+:root[data-theme="dark"] .modal-card,
+:root[data-theme="dark"] .graph-card,
+:root[data-theme="dark"] .profile-selector,
+:root[data-theme="dark"] .session-box,
+:root[data-theme="dark"] .activity-panel {
+  background: #1a2438;
+  border-color: #2b3a56;
+  color: #e3e9f5;
+}
+
+:root[data-theme="dark"] .task-list li,
+:root[data-theme="dark"] .nested-list li {
+  background: #182236;
+}
+
+:root[data-theme="dark"] .clickable-card:hover {
+  background: #22304a;
+}
+
+:root[data-theme="dark"] .task-card-completed {
+  background: #2a3240 !important;
+  border-color: #3a4558;
+}
+
+:root[data-theme="dark"] .daily-phrase-label,
+:root[data-theme="dark"] .task-meta,
+:root[data-theme="dark"] .auth-card p,
+:root[data-theme="dark"] .auth-theme-row,
+:root[data-theme="dark"] .profile-selector label {
+  color: #aeb9cf;
+}
+
+:root[data-theme="dark"] .daily-phrase-text {
+  color: #e9eef9;
+  text-shadow: 0 1px 0 rgba(0, 0, 0, 0.35), 0 6px 20px rgba(0, 0, 0, 0.35);
+}
+
+:root[data-theme="dark"] .top-nav a,
+:root[data-theme="dark"] .tab,
+:root[data-theme="dark"] .ghost-button,
+:root[data-theme="dark"] .card-menu-trigger,
+:root[data-theme="dark"] .card-menu-item,
+:root[data-theme="dark"] .graph-controls select,
+:root[data-theme="dark"] .logs-filters select,
+:root[data-theme="dark"] .logs-filters input,
+:root[data-theme="dark"] .graph-search input,
+:root[data-theme="dark"] .auth-theme-row select,
+:root[data-theme="dark"] .session-box select {
+  background: #101827;
+  border-color: #344766;
+  color: #dbe5f8;
+}
+
+:root[data-theme="dark"] .top-nav a.active,
+:root[data-theme="dark"] .tab.active {
+  background: #1e3b78;
+  border-color: #355ea8;
+  color: #dfe9ff;
+}
+
+:root[data-theme="dark"] .search-input,
+:root[data-theme="dark"] .quick-add input,
+:root[data-theme="dark"] .activity-title-input,
+:root[data-theme="dark"] .form-grid input,
+:root[data-theme="dark"] .form-grid select,
+:root[data-theme="dark"] .form-grid textarea,
+:root[data-theme="dark"] .auth-form input,
+:root[data-theme="dark"] .profile-selector input,
+:root[data-theme="dark"] .profile-selector select {
+  background: #111a2a;
+  border-color: #344766;
+  color: #e3e9f5;
+}
+
+:root[data-theme="dark"] .action-button {
+  background: #274886;
+  border-color: #3c63ab;
+  color: #eaf2ff;
+}
+
+:root[data-theme="dark"] .action-button:hover {
+  background: #32569a;
+}
+
+:root[data-theme="dark"] .ghost-button:hover,
+:root[data-theme="dark"] .tag-chip:hover,
+:root[data-theme="dark"] .tab:hover,
+:root[data-theme="dark"] .card-menu-item:hover,
+:root[data-theme="dark"] .graph-search-results li:hover {
+  background: #1c2a44;
+}
+
+:root[data-theme="dark"] .status.info {
+  background: #1c2b49;
+  border-color: #365182;
+}
+
+:root[data-theme="dark"] .status.error {
+  background: #3a1f28;
+  border-color: #7a3a4d;
+}
+
+:root[data-theme="dark"] .app-footnote a {
+  color: #b9c7e3;
 }

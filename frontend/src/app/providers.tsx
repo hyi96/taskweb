@@ -5,6 +5,7 @@ import { BrowserRouter } from "react-router-dom";
 import { CurrentActivityProvider } from "../features/activity/CurrentActivityContext";
 import { AuthProvider } from "../features/auth/AuthContext";
 import { ProfileProvider } from "../features/profiles/ProfileContext";
+import { ThemeProvider } from "./theme";
 
 export function AppProviders({ children }: PropsWithChildren) {
   const [queryClient] = useState(
@@ -21,13 +22,15 @@ export function AppProviders({ children }: PropsWithChildren) {
 
   return (
     <BrowserRouter>
-      <QueryClientProvider client={queryClient}>
-        <AuthProvider>
-          <ProfileProvider>
-            <CurrentActivityProvider>{children}</CurrentActivityProvider>
-          </ProfileProvider>
-        </AuthProvider>
-      </QueryClientProvider>
+      <ThemeProvider>
+        <QueryClientProvider client={queryClient}>
+          <AuthProvider>
+            <ProfileProvider>
+              <CurrentActivityProvider>{children}</CurrentActivityProvider>
+            </ProfileProvider>
+          </AuthProvider>
+        </QueryClientProvider>
+      </ThemeProvider>
     </BrowserRouter>
   );
 }

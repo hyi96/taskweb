@@ -2,6 +2,7 @@ import { FormEvent, useState } from "react";
 import { ApiError } from "../../shared/api/client";
 import { setStorageMode } from "../../shared/repositories/client";
 import { useAuthContext } from "./AuthContext";
+import { useTheme } from "../../app/theme";
 
 function authErrorMessage(error: unknown): string {
   if (error instanceof ApiError && error.payload && typeof error.payload === "object") {
@@ -35,6 +36,7 @@ function authErrorMessage(error: unknown): string {
 
 export function LoginPage() {
   const { login, signup } = useAuthContext();
+  const { mode, setMode } = useTheme();
   const [mode, setMode] = useState<"login" | "signup">("login");
   const [username, setUsername] = useState("");
   const [email, setEmail] = useState("");
@@ -70,6 +72,19 @@ export function LoginPage() {
   return (
     <div className="auth-layout">
       <div className="auth-card">
+        <div className="auth-theme-row">
+          <label htmlFor="auth-theme">Theme</label>
+          <select
+            id="auth-theme"
+            value={mode}
+            onChange={(event) => setMode(event.target.value as "system" | "light" | "dark")}
+            disabled={isSubmitting}
+          >
+            <option value="system">follow system</option>
+            <option value="light">light</option>
+            <option value="dark">dark</option>
+          </select>
+        </div>
         <h1>taskweb</h1>
         <h2>{mode === "signup" ? "Sign up" : "Sign in"}</h2>
         <p>

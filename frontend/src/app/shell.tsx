@@ -6,9 +6,11 @@ import { useAuthContext } from "../features/auth/AuthContext";
 import { setStorageMode, storageMode } from "../shared/repositories/client";
 import { ProfileSelector } from "../features/profiles/ProfileSelector";
 import { fetchDailyPhrase } from "../shared/api/site";
+import { useTheme } from "./theme";
 
 export function AppShell({ children }: PropsWithChildren) {
   const { isCloudMode, username, logout } = useAuthContext();
+  const { mode, setMode } = useTheme();
   const isGuestMode = storageMode === "indexeddb";
   const phraseQuery = useQuery({
     queryKey: ["site", "daily-phrase"],
@@ -37,6 +39,17 @@ export function AppShell({ children }: PropsWithChildren) {
         <div className="header-controls">
           <CurrentActivityPanel />
           <ProfileSelector />
+          <div className="session-box">
+            <small>Theme</small>
+            <select
+              value={mode}
+              onChange={(event) => setMode(event.target.value as "system" | "light" | "dark")}
+            >
+              <option value="system">follow system</option>
+              <option value="light">light</option>
+              <option value="dark">dark</option>
+            </select>
+          </div>
           {isCloudMode ? (
             <div className="session-box">
               <small>Signed in as {username ?? "unknown"}</small>
