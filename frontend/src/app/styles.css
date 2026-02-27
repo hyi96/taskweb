@@ -167,10 +167,10 @@ body {
 
 .header-controls {
   display: grid;
-  grid-template-columns: repeat(2, minmax(420px, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   align-items: stretch;
   gap: 12px;
-  width: min(100%, 1080px);
+  width: min(100%, 720px);
   margin-left: auto;
 }
 
