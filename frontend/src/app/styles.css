@@ -348,10 +348,11 @@ body {
   border: 1px solid #d7dfef;
   border-radius: 12px;
   background: #f8fbff;
-  padding: 10px;
+  padding: 12px;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  justify-content: space-between;
+  gap: 10px;
   min-height: 0;
   height: 100%;
 }
@@ -372,8 +373,10 @@ body {
 .activity-title-input {
   border: 1px solid #cad2e2;
   border-radius: 8px;
-  padding: 8px 10px;
-  font: inherit;
+  padding: 10px 12px;
+  font-size: 18px;
+  line-height: 1.2;
+  font-family: inherit;
 }
 
 .activity-title-input:focus-visible {
@@ -389,7 +392,9 @@ body {
 }
 
 .activity-actions button {
-  padding: 6px 8px;
+  min-height: 42px;
+  padding: 10px 8px;
+  font-size: 19px;
 }
 
 .tag-filter-row {
