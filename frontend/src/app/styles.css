@@ -164,14 +164,20 @@ body {
 
 .header-controls {
   display: grid;
-  grid-template-columns: minmax(320px, 1.35fr) minmax(260px, 1fr) minmax(220px, 0.9fr);
+  grid-template-columns: minmax(320px, 1.35fr) minmax(420px, 1fr);
   align-items: stretch;
+  gap: 12px;
+}
+
+.header-right-column {
+  display: grid;
+  grid-template-rows: auto auto;
   gap: 12px;
 }
 
 .header-side-stack {
   display: grid;
-  grid-template-rows: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 12px;
   height: 100%;
 }
@@ -951,6 +957,12 @@ body {
     flex-direction: column;
     align-items: stretch;
     display: flex;
+  }
+
+  .header-right-column {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
   }
 
   .header-side-stack {
