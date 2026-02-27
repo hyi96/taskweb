@@ -23,61 +23,63 @@ export function AppShell({ children }: PropsWithChildren) {
   return (
     <div className="app-shell">
       <header className="app-header">
-        <div className="brand-and-nav">
-          <div className="brand">
-            <div className="daily-phrase-label">Quote of the day</div>
-            <h1 className="daily-phrase-text">"{phraseText}" - {phraseAuthor}</h1>
-          </div>
-          <nav className="top-nav">
-            <NavLink to="/tasks">Tasks</NavLink>
-            <NavLink to="/profiles">Profiles</NavLink>
-            <NavLink to="/tags">Tags</NavLink>
-            <NavLink to="/logs">Logs</NavLink>
-            <NavLink to="/graphs">Graphs</NavLink>
-          </nav>
-        </div>
-        <div className="header-controls">
-          <CurrentActivityPanel />
-          <div className="header-right-column">
-            <div className="header-side-stack">
-              {isCloudMode ? (
-                <div className="session-box">
-                  <small>Signed in as {username ?? "unknown"}</small>
-                  <button type="button" className="ghost-button" onClick={() => void logout()}>
-                    Logout
-                  </button>
-                </div>
-              ) : null}
-              {isGuestMode ? (
-                <div className="session-box session-box-inline">
-                  <small>Guest mode (local storage)</small>
-                  <button
-                    type="button"
-                    className="ghost-button"
-                    onClick={() => {
-                      setStorageMode("api");
-                      window.location.reload();
-                    }}
-                  >
-                    Use cloud storage
-                  </button>
-                </div>
-              ) : null}
-              <div className="session-box session-box-inline-theme">
-                <small>Theme</small>
-                <select
-                  value={mode}
-                  onChange={(event) => setMode(event.target.value as "system" | "light" | "dark")}
-                >
-                  <option value="system">follow system</option>
-                  <option value="light">light</option>
-                  <option value="dark">dark</option>
-                </select>
-              </div>
+        <div className="header-top">
+          <div className="brand-and-nav">
+            <div className="brand">
+              <div className="daily-phrase-label">Quote of the day</div>
+              <h1 className="daily-phrase-text">"{phraseText}" - {phraseAuthor}</h1>
             </div>
-            <ProfileSelector compact />
+          </div>
+          <div className="header-controls">
+            <CurrentActivityPanel />
+            <div className="header-right-column">
+              <div className="header-side-stack">
+                {isCloudMode ? (
+                  <div className="session-box">
+                    <small>Signed in as {username ?? "unknown"}</small>
+                    <button type="button" className="ghost-button" onClick={() => void logout()}>
+                      Logout
+                    </button>
+                  </div>
+                ) : null}
+                {isGuestMode ? (
+                  <div className="session-box session-box-inline">
+                    <small>Guest mode (local storage)</small>
+                    <button
+                      type="button"
+                      className="ghost-button"
+                      onClick={() => {
+                        setStorageMode("api");
+                        window.location.reload();
+                      }}
+                    >
+                      Use cloud storage
+                    </button>
+                  </div>
+                ) : null}
+                <div className="session-box session-box-inline-theme">
+                  <small>Theme</small>
+                  <select
+                    value={mode}
+                    onChange={(event) => setMode(event.target.value as "system" | "light" | "dark")}
+                  >
+                    <option value="system">follow system</option>
+                    <option value="light">light</option>
+                    <option value="dark">dark</option>
+                  </select>
+                </div>
+              </div>
+              <ProfileSelector compact />
+            </div>
           </div>
         </div>
+        <nav className="top-nav">
+          <NavLink to="/tasks">Tasks</NavLink>
+          <NavLink to="/profiles">Profiles</NavLink>
+          <NavLink to="/tags">Tags</NavLink>
+          <NavLink to="/logs">Logs</NavLink>
+          <NavLink to="/graphs">Graphs</NavLink>
+        </nav>
       </header>
       <main className="app-main">{children}</main>
       <footer className="app-footnote">
