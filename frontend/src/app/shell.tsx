@@ -63,7 +63,7 @@ export function AppShell({ children }: PropsWithChildren) {
                   </button>
                 </div>
               ) : null}
-              <div className="session-box session-box-inline-theme">
+              <div className="session-box">
                 <small>Theme</small>
                 <select
                   value={mode}
