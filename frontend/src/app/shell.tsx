@@ -39,40 +39,42 @@ export function AppShell({ children }: PropsWithChildren) {
         <div className="header-controls">
           <CurrentActivityPanel />
           <ProfileSelector />
-          <div className="session-box">
-            <small>Theme</small>
-            <select
-              value={mode}
-              onChange={(event) => setMode(event.target.value as "system" | "light" | "dark")}
-            >
-              <option value="system">follow system</option>
-              <option value="light">light</option>
-              <option value="dark">dark</option>
-            </select>
-          </div>
-          {isCloudMode ? (
+          <div className="header-side-stack">
+            {isCloudMode ? (
+              <div className="session-box">
+                <small>Signed in as {username ?? "unknown"}</small>
+                <button type="button" className="ghost-button" onClick={() => void logout()}>
+                  Logout
+                </button>
+              </div>
+            ) : null}
+            {isGuestMode ? (
+              <div className="session-box">
+                <small>Guest mode (local storage)</small>
+                <button
+                  type="button"
+                  className="ghost-button"
+                  onClick={() => {
+                    setStorageMode("api");
+                    window.location.reload();
+                  }}
+                >
+                  Use cloud storage
+                </button>
+              </div>
+            ) : null}
             <div className="session-box">
-              <small>Signed in as {username ?? "unknown"}</small>
-              <button type="button" className="ghost-button" onClick={() => void logout()}>
-                Logout
-              </button>
-            </div>
-          ) : null}
-          {isGuestMode ? (
-            <div className="session-box">
-              <small>Guest mode (local storage)</small>
-              <button
-                type="button"
-                className="ghost-button"
-                onClick={() => {
-                  setStorageMode("api");
-                  window.location.reload();
-                }}
+              <small>Theme</small>
+              <select
+                value={mode}
+                onChange={(event) => setMode(event.target.value as "system" | "light" | "dark")}
               >
-                Use cloud storage
-              </button>
+                <option value="system">follow system</option>
+                <option value="light">light</option>
+                <option value="dark">dark</option>
+              </select>
             </div>
-          ) : null}
+          </div>
         </div>
       </header>
       <main className="app-main">{children}</main>

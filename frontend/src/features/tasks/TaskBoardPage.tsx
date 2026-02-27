@@ -1097,8 +1097,10 @@ export function TaskBoardPage() {
                   onClick={() => setEditorState({ mode: "edit", task })}
                 >
                   {renderCardMenu(task)}
-                  <strong className={done ? "task-title-completed" : undefined}>{task.title}</strong>
-                  {done ? <span className="completion-badge">completed</span> : null}
+                  <div className="task-title-row">
+                    <strong className={done ? "task-title-completed" : undefined}>{task.title}</strong>
+                    {done ? <span className="completion-badge">completed</span> : null}
+                  </div>
                   <span className="task-meta">
                     Streak {task.current_streak} | Gold {task.gold_delta} | {formatDailyDueText(task)}
                   </span>
@@ -1151,8 +1153,10 @@ export function TaskBoardPage() {
                   onClick={() => setEditorState({ mode: "edit", task })}
                 >
                   {renderCardMenu(task)}
-                  <strong className={done ? "task-title-completed" : undefined}>{task.title}</strong>
-                  {done ? <span className="completion-badge">completed</span> : null}
+                  <div className="task-title-row">
+                    <strong className={done ? "task-title-completed" : undefined}>{task.title}</strong>
+                    {done ? <span className="completion-badge">completed</span> : null}
+                  </div>
                   {task.due_at && <span className="task-meta">{formatTodoDueText(task.due_at)}</span>}
                   <button
                     className="action-button"
@@ -1203,8 +1207,10 @@ export function TaskBoardPage() {
                   onClick={() => setEditorState({ mode: "edit", task })}
                 >
                   {renderCardMenu(task)}
-                  <strong className={claimedLocked ? "task-title-completed" : undefined}>{task.title}</strong>
-                  {claimedLocked ? <span className="completion-badge">claimed</span> : null}
+                  <div className="task-title-row">
+                    <strong className={claimedLocked ? "task-title-completed" : undefined}>{task.title}</strong>
+                    {claimedLocked ? <span className="completion-badge">claimed</span> : null}
+                  </div>
                   <span className="task-meta">Cost {Math.abs(toNumber(task.gold_delta)).toFixed(2)}</span>
                   <button
                     className="action-button"

@@ -159,12 +159,18 @@ body {
   border-radius: 12px;
   background: #f8fbff;
   padding: 10px;
-  min-height: 146px;
+  min-height: 0;
 }
 
 .header-controls {
   display: flex;
-  align-items: stretch;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.header-side-stack {
+  display: flex;
+  flex-direction: column;
   gap: 12px;
 }
 
@@ -178,7 +184,7 @@ body {
   flex-direction: column;
   justify-content: space-between;
   gap: 8px;
-  min-height: 146px;
+  min-height: 0;
 }
 
 .session-box select {
@@ -280,7 +286,7 @@ body {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  min-height: 146px;
+  min-height: 0;
 }
 
 .activity-panel-head {
@@ -618,8 +624,15 @@ body {
   text-decoration-thickness: 1.5px;
 }
 
+.task-title-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  flex-wrap: wrap;
+}
+
 .completion-badge {
-  align-self: flex-start;
   font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.06em;
@@ -932,6 +945,12 @@ body {
 
   .header-controls {
     flex-direction: column;
+    align-items: stretch;
+  }
+
+  .header-side-stack {
+    flex-direction: column;
+    gap: 8px;
   }
 
   .profile-selector {
