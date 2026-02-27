@@ -41,7 +41,7 @@ export function AppShell({ children }: PropsWithChildren) {
           <div className="header-right-column">
             <div className="header-side-stack">
               {isCloudMode ? (
-                <div className="session-box">
+                <div className="session-box session-box-inline">
                   <small>Signed in as {username ?? "unknown"}</small>
                   <button type="button" className="ghost-button" onClick={() => void logout()}>
                     Logout
@@ -49,7 +49,7 @@ export function AppShell({ children }: PropsWithChildren) {
                 </div>
               ) : null}
               {isGuestMode ? (
-                <div className="session-box">
+                <div className="session-box session-box-inline">
                   <small>Guest mode (local storage)</small>
                   <button
                     type="button"
@@ -63,7 +63,7 @@ export function AppShell({ children }: PropsWithChildren) {
                   </button>
                 </div>
               ) : null}
-              <div className="session-box">
+              <div className="session-box session-box-inline">
                 <small>Theme</small>
                 <select
                   value={mode}
@@ -75,7 +75,7 @@ export function AppShell({ children }: PropsWithChildren) {
                 </select>
               </div>
             </div>
-            <ProfileSelector />
+            <ProfileSelector compact />
           </div>
         </div>
       </header>

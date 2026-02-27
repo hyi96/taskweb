@@ -104,7 +104,7 @@ body {
 
 .app-header {
   display: flex;
-  align-items: end;
+  align-items: flex-start;
   justify-content: space-between;
   margin-bottom: 24px;
   gap: 16px;
@@ -163,15 +163,14 @@ body {
 }
 
 .header-controls {
-  display: grid;
-  grid-template-columns: minmax(320px, 1.35fr) minmax(420px, 1fr);
-  align-items: stretch;
+  display: flex;
+  align-items: flex-start;
   gap: 12px;
 }
 
 .header-right-column {
-  display: grid;
-  grid-template-rows: auto auto;
+  display: flex;
+  flex-direction: column;
   gap: 12px;
   min-width: 0;
 }
@@ -180,7 +179,6 @@ body {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 12px;
-  height: 100%;
   min-width: 0;
 }
 
@@ -205,10 +203,35 @@ body {
   padding: 10px;
   display: flex;
   flex-direction: column;
-  justify-content: space-between;
   gap: 8px;
   min-height: 0;
-  height: 100%;
+}
+
+.session-box-inline {
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.session-box-inline .ghost-button,
+.session-box-inline select {
+  width: auto;
+  min-width: 140px;
+}
+
+.profile-selector-inline {
+  min-width: 0;
+}
+
+.profile-selector-inline-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.profile-selector-inline-row select {
+  min-width: 200px;
 }
 
 .session-box select {
@@ -971,20 +994,29 @@ body {
   .header-controls {
     flex-direction: column;
     align-items: stretch;
-    display: flex;
   }
 
   .header-right-column {
-    display: flex;
-    flex-direction: column;
     gap: 8px;
   }
 
   .header-side-stack {
-    flex-direction: column;
     gap: 8px;
-    display: flex;
-    height: auto;
+    grid-template-columns: 1fr;
+  }
+
+  .session-box-inline {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .profile-selector-inline-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .profile-selector-inline-row select {
+    min-width: 0;
   }
 
   .profile-selector {
