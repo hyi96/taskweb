@@ -73,6 +73,7 @@ const REWARD_SORTS = [
 type SortLabel = (typeof HABIT_SORTS | typeof DAILY_SORTS | typeof TODO_SORTS | typeof REWARD_SORTS)[number];
 
 const SORTS_STORAGE_KEY_PREFIX = "taskweb.task_sorts";
+const FILTERS_STORAGE_KEY_PREFIX = "taskweb.task_filters";
 
 type EditorPayload = {
   profile_id?: string;
@@ -172,6 +173,64 @@ function storeSortModes(
     return;
   }
   window.localStorage.setItem(taskSortsStorageKey(profileId), JSON.stringify(sorts));
+}
+
+function taskFiltersStorageKey(profileId: string) {
+  return `${FILTERS_STORAGE_KEY_PREFIX}.${profileId}`;
+}
+
+function loadStoredFilterModes(profileId: string): {
+  habitFilter: HabitFilter;
+  dailyFilter: DailyFilter;
+  todoFilter: TodoFilter;
+  rewardFilter: RewardFilter;
+} | null {
+  if (typeof window === "undefined" || !profileId) {
+    return null;
+  }
+  const raw = window.localStorage.getItem(taskFiltersStorageKey(profileId));
+  if (!raw) {
+    return null;
+  }
+  try {
+    const parsed = JSON.parse(raw) as {
+      habitFilter?: string;
+      dailyFilter?: string;
+      todoFilter?: string;
+      rewardFilter?: string;
+    };
+    const habitFilter: HabitFilter = parsed.habitFilter === "hidden" ? "hidden" : "all";
+    const dailyFilter: DailyFilter =
+      parsed.dailyFilter === "due" || parsed.dailyFilter === "not due" || parsed.dailyFilter === "hidden"
+        ? parsed.dailyFilter
+        : "all";
+    const todoFilter: TodoFilter =
+      parsed.todoFilter === "scheduled" || parsed.todoFilter === "completed" || parsed.todoFilter === "hidden"
+        ? parsed.todoFilter
+        : "active";
+    const rewardFilter: RewardFilter =
+      parsed.rewardFilter === "one-time" || parsed.rewardFilter === "repeatable" || parsed.rewardFilter === "hidden"
+        ? parsed.rewardFilter
+        : "all";
+    return { habitFilter, dailyFilter, todoFilter, rewardFilter };
+  } catch {
+    return null;
+  }
+}
+
+function storeFilterModes(
+  profileId: string,
+  filters: {
+    habitFilter: HabitFilter;
+    dailyFilter: DailyFilter;
+    todoFilter: TodoFilter;
+    rewardFilter: RewardFilter;
+  }
+) {
+  if (typeof window === "undefined" || !profileId) {
+    return;
+  }
+  window.localStorage.setItem(taskFiltersStorageKey(profileId), JSON.stringify(filters));
 }
 
 function newDaySeenStorageKey(profileId: string, day: string) {
@@ -503,6 +562,7 @@ export function TaskBoardPage() {
   const [checkedNewDayIds, setCheckedNewDayIds] = useState<string[]>([]);
   const checkedNewDayIdsRef = useRef<string[]>([]);
   const sortsHydratedRef = useRef(false);
+  const filtersHydratedRef = useRef(false);
 
   const tasksQuery = useQuery({
     queryKey: tasksKey,
@@ -607,6 +667,7 @@ export function TaskBoardPage() {
     setCheckedNewDayIds([]);
     checkedNewDayIdsRef.current = [];
     sortsHydratedRef.current = false;
+    filtersHydratedRef.current = false;
   }, [profileId]);
 
   useEffect(() => {
@@ -632,6 +693,30 @@ export function TaskBoardPage() {
     }
     storeSortModes(profileId, { habitSort, dailySort, todoSort, rewardSort });
   }, [profileId, habitSort, dailySort, todoSort, rewardSort]);
+
+  useEffect(() => {
+    const stored = loadStoredFilterModes(profileId);
+    if (!stored) {
+      setHabitFilter("all");
+      setDailyFilter("all");
+      setTodoFilter("active");
+      setRewardFilter("all");
+      filtersHydratedRef.current = true;
+      return;
+    }
+    setHabitFilter(stored.habitFilter);
+    setDailyFilter(stored.dailyFilter);
+    setTodoFilter(stored.todoFilter);
+    setRewardFilter(stored.rewardFilter);
+    filtersHydratedRef.current = true;
+  }, [profileId]);
+
+  useEffect(() => {
+    if (!filtersHydratedRef.current) {
+      return;
+    }
+    storeFilterModes(profileId, { habitFilter, dailyFilter, todoFilter, rewardFilter });
+  }, [profileId, habitFilter, dailyFilter, todoFilter, rewardFilter]);
 
   useEffect(() => {
     if (!newDayItems.length) {
