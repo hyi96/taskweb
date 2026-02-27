@@ -1007,7 +1007,11 @@ body {
   }
 }
 
-@media (max-width: 640px) {
+@media (max-width: 900px) {
+  .app-shell {
+    padding: 12px;
+  }
+
   .app-header {
     flex-direction: column;
     align-items: stretch;
@@ -1019,8 +1023,8 @@ body {
   }
 
   .brand .daily-phrase-text {
-    font-size: 16px;
-    line-height: 1.2;
+    font-size: clamp(16px, 3.8vw, 22px);
+    line-height: 1.22;
     margin: 0;
   }
 
@@ -1028,6 +1032,8 @@ body {
     display: flex;
     flex-direction: column;
     align-items: stretch;
+    width: 100%;
+    margin-left: 0;
   }
 
   .header-right-column {
@@ -1037,6 +1043,26 @@ body {
   .header-side-stack {
     gap: 8px;
     grid-template-columns: 1fr;
+  }
+
+  .task-columns {
+    grid-template-columns: 1fr;
+  }
+
+  .task-column {
+    min-width: 0;
+  }
+
+  .activity-panel {
+    min-width: 0;
+    max-width: unset;
+  }
+}
+
+@media (max-width: 640px) {
+  .brand .daily-phrase-text {
+    font-size: 16px;
+    line-height: 1.2;
   }
 
   .session-box-inline {
@@ -1062,26 +1088,9 @@ body {
   .profile-selector {
     min-width: unset;
   }
-
-  .task-columns {
-    grid-template-columns: 1fr;
-  }
-
   .board-toolbar {
     flex-direction: column;
     align-items: stretch;
-  }
-
-  .activity-panel {
-    min-width: 0;
-    max-width: unset;
-  }
-}
-
-@media (max-width: 900px) {
-  .brand .daily-phrase-text {
-    font-size: clamp(16px, 3.8vw, 22px);
-    line-height: 1.22;
   }
 }
 
