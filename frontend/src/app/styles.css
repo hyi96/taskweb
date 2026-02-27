@@ -104,25 +104,16 @@ body {
 
 .app-header {
   display: flex;
-  flex-direction: column;
-  align-items: stretch;
-  gap: 10px;
-  margin-bottom: 24px;
-}
-
-.header-top {
-  display: flex;
   align-items: flex-start;
   justify-content: space-between;
+  margin-bottom: 24px;
   gap: 16px;
 }
 
 .brand-and-nav {
   display: flex;
   flex-direction: column;
-  gap: 0;
-  flex: 1;
-  min-width: 0;
+  gap: 8px;
 }
 
 .brand h1 {
@@ -293,7 +284,6 @@ body {
 .top-nav {
   display: flex;
   gap: 10px;
-  flex-wrap: wrap;
 }
 
 .top-nav a {
@@ -1001,7 +991,7 @@ body {
 }
 
 @media (max-width: 640px) {
-  .header-top {
+  .app-header {
     flex-direction: column;
     align-items: stretch;
     gap: 12px;
@@ -1021,10 +1011,6 @@ body {
     display: flex;
     flex-direction: column;
     align-items: stretch;
-  }
-
-  .top-nav {
-    align-self: flex-start;
   }
 
   .header-right-column {
