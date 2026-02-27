@@ -1091,9 +1091,14 @@ export function TaskBoardPage() {
             {visibleDailies.map((task) => {
               const done = isDailyCompletedForCurrentPeriod(task);
               return (
-                <li key={task.id} className="clickable-card" onClick={() => setEditorState({ mode: "edit", task })}>
+                <li
+                  key={task.id}
+                  className={done ? "clickable-card task-card-completed" : "clickable-card"}
+                  onClick={() => setEditorState({ mode: "edit", task })}
+                >
                   {renderCardMenu(task)}
-                  <strong>{task.title}</strong>
+                  <strong className={done ? "task-title-completed" : undefined}>{task.title}</strong>
+                  {done ? <span className="completion-badge">completed</span> : null}
                   <span className="task-meta">
                     Streak {task.current_streak} | Gold {task.gold_delta} | {formatDailyDueText(task)}
                   </span>
@@ -1137,24 +1142,32 @@ export function TaskBoardPage() {
             </button>
           </div>
           <ul className="task-list">
-            {visibleTodos.map((task) => (
-              <li key={task.id} className="clickable-card" onClick={() => setEditorState({ mode: "edit", task })}>
-                {renderCardMenu(task)}
-                <strong>{task.title}</strong>
-                {task.due_at && <span className="task-meta">{formatTodoDueText(task.due_at)}</span>}
-                <button
-                  className="action-button"
-                  type="button"
-                  disabled={task.is_done || isTaskPending(task.id)}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    void handleTodoComplete(task);
-                  }}
+            {visibleTodos.map((task) => {
+              const done = task.is_done;
+              return (
+                <li
+                  key={task.id}
+                  className={done ? "clickable-card task-card-completed" : "clickable-card"}
+                  onClick={() => setEditorState({ mode: "edit", task })}
                 >
-                  {task.is_done ? "Done" : "Complete"}
-                </button>
-              </li>
-            ))}
+                  {renderCardMenu(task)}
+                  <strong className={done ? "task-title-completed" : undefined}>{task.title}</strong>
+                  {done ? <span className="completion-badge">completed</span> : null}
+                  {task.due_at && <span className="task-meta">{formatTodoDueText(task.due_at)}</span>}
+                  <button
+                    className="action-button"
+                    type="button"
+                    disabled={task.is_done || isTaskPending(task.id)}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      void handleTodoComplete(task);
+                    }}
+                  >
+                    {task.is_done ? "Done" : "Complete"}
+                  </button>
+                </li>
+              );
+            })}
           </ul>
         </section>
 
@@ -1184,9 +1197,14 @@ export function TaskBoardPage() {
             {visibleRewards.map((task) => {
               const claimedLocked = task.is_claimed && !task.is_repeatable;
               return (
-                <li key={task.id} className="clickable-card" onClick={() => setEditorState({ mode: "edit", task })}>
+                <li
+                  key={task.id}
+                  className={claimedLocked ? "clickable-card task-card-completed" : "clickable-card"}
+                  onClick={() => setEditorState({ mode: "edit", task })}
+                >
                   {renderCardMenu(task)}
-                  <strong>{task.title}</strong>
+                  <strong className={claimedLocked ? "task-title-completed" : undefined}>{task.title}</strong>
+                  {claimedLocked ? <span className="completion-badge">claimed</span> : null}
                   <span className="task-meta">Cost {Math.abs(toNumber(task.gold_delta)).toFixed(2)}</span>
                   <button
                     className="action-button"
