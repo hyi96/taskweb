@@ -164,7 +164,7 @@ body {
 
 .header-controls {
   display: flex;
-  align-items: flex-start;
+  align-items: stretch;
   gap: 12px;
 }
 
@@ -193,6 +193,7 @@ body {
 .header-controls .activity-panel {
   min-width: 0;
   max-width: none;
+  height: 100%;
 }
 
 .session-box {
@@ -217,6 +218,19 @@ body {
 .session-box-inline select {
   width: auto;
   min-width: 140px;
+}
+
+.session-box-inline-theme {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 8px;
+}
+
+.session-box-inline-theme select {
+  width: auto;
+  min-width: 120px;
 }
 
 .profile-selector-inline {
@@ -1008,6 +1022,12 @@ body {
   .session-box-inline {
     flex-direction: column;
     align-items: stretch;
+  }
+
+  .session-box-inline-theme {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 6px;
   }
 
   .profile-selector-inline-row {
