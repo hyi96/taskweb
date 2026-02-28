@@ -11,10 +11,11 @@ export function ProfileSelector({ compact = false }: ProfileSelectorProps) {
     <div className={compact ? "profile-selector profile-selector-inline" : "profile-selector"}>
       {compact ? (
         <div className="profile-selector-inline-row">
-          <label htmlFor="profile-id">Active Profile</label>
+          <small className="profile-selector-compact-label">Active Profile</small>
           <select
             id="profile-id"
             name="profile-id"
+            aria-label="Active Profile"
             value={profileId}
             onChange={(event) => setProfileId(event.target.value)}
           >
