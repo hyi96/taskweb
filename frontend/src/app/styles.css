@@ -251,6 +251,11 @@ body {
   gap: 10px;
 }
 
+.profile-selector-inline-row label {
+  font-size: 12px;
+  color: #5b6477;
+}
+
 .profile-selector-inline-row select {
   min-width: 200px;
 }
@@ -1127,6 +1132,10 @@ body {
 :root[data-theme="dark"] .auth-theme-row,
 :root[data-theme="dark"] .profile-selector label {
   color: #aeb9cf;
+}
+
+:root[data-theme="dark"] .profile-selector-inline-row label {
+  color: #d7e1f5;
 }
 
 :root[data-theme="dark"] .daily-phrase-text {
