@@ -18,6 +18,7 @@
 
 body {
   margin: 0;
+  overflow-x: clip;
 }
 
 :root[data-theme="dark"] body {
@@ -100,6 +101,7 @@ body {
 .app-shell {
   min-height: 100vh;
   padding: 24px;
+  overflow-x: clip;
 }
 
 .app-header {
@@ -316,6 +318,7 @@ body {
   border-radius: 16px;
   border: 1px solid #d7dfef;
   padding: 20px;
+  overflow-x: clip;
 }
 
 .app-footnote {
@@ -913,6 +916,7 @@ body {
   display: flex;
   align-items: center;
   gap: 8px;
+  flex-wrap: wrap;
 }
 
 .tag-picker {
@@ -1096,6 +1100,22 @@ body {
   .board-toolbar {
     flex-direction: column;
     align-items: stretch;
+  }
+
+  .profile-row {
+    flex-direction: column !important;
+    align-items: stretch;
+    gap: 8px;
+  }
+
+  .profile-row > div:first-child {
+    min-width: 0;
+  }
+
+  .tag-actions {
+    margin-left: 0;
+    justify-content: flex-start;
+    width: 100%;
   }
 }
 
