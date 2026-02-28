@@ -190,3 +190,45 @@ class TaskAppPortabilityServiceTests(TestCase):
         imported_todo = Task.objects.get(profile=imported_profile, title="DST edge todo")
         # 23:59:59 in America/Los_Angeles on 2026-03-15 is 06:59:59Z on 2026-03-16 (DST in effect).
         self.assertEqual(imported_todo.due_at.isoformat(), "2026-03-16T06:59:59+00:00")
+
+    def test_import_todo_due_date_preserves_utc_z_timestamp_with_import_timezone(self):
+        archive_buffer = io.BytesIO()
+        with zipfile.ZipFile(archive_buffer, "w", zipfile.ZIP_DEFLATED) as archive:
+            archive.writestr(
+                "metadata.json",
+                json.dumps({"ExportedAt": "2026-03-20T00:00:00Z", "AppVersion": "1.0.0", "UserName": "Main"}),
+            )
+            archive.writestr("data/tags.json", "[]")
+            archive.writestr("data/rewards.json", "[]")
+            archive.writestr("data/user.json", json.dumps({"Id": str(self.profile.id), "Gold": 0}))
+            archive.writestr(
+                "data/tasks.json",
+                json.dumps(
+                    [
+                        {
+                            "$type": "Todo",
+                            "Id": "33333333-3333-3333-3333-333333333333",
+                            "CreatedAt": "2026-03-10T00:00:00Z",
+                            "Title": "UTC todo",
+                            "Notes": "",
+                            "Tags": [],
+                            "LastCompletedDate": None,
+                            "GoldReward": 1,
+                            "IsHidden": False,
+                            "DueDate": "2026-03-16T07:59:59Z",
+                            "Checklist": [],
+                        }
+                    ]
+                ),
+            )
+
+        imported_profile = Profile.objects.create(account=self.user, name="Imported UTC Todo")
+        TaskAppPortabilityService.import_profile_archive(
+            profile=imported_profile,
+            user=self.user,
+            archive_file=io.BytesIO(archive_buffer.getvalue()),
+            import_timezone="America/Los_Angeles",
+        )
+
+        imported_todo = Task.objects.get(profile=imported_profile, title="UTC todo")
+        self.assertEqual(imported_todo.due_at.isoformat(), "2026-03-16T07:59:59+00:00")

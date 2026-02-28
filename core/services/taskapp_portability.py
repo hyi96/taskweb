@@ -53,9 +53,22 @@ def _parse_datetime(
     # TaskApp stores up to 7 fractional second digits; Python expects <= 6.
     cleaned = re.sub(r"\.(\d{6})\d+(?=(Z|[+-]\d{2}:\d{2})$)", r".\1", value)
 
+    try:
+        parsed = datetime.fromisoformat(cleaned.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+
+    suffix_match = re.search(r"(Z|[+-]\d{2}:\d{2})$", cleaned)
+    suffix = suffix_match.group(1) if suffix_match else None
+
     # Some TaskApp exports carry a fixed offset that drifts around DST boundaries.
-    # For due dates, prefer the importing browser's timezone wall-time when provided.
-    if interpret_as_wall_time_tz is not None:
+    # For due dates with non-UTC offsets, prefer the importing browser's timezone wall-time.
+    # Keep true UTC instants ("Z"/"+00:00") unchanged so taskweb export/import round-trips exactly.
+    if (
+        interpret_as_wall_time_tz is not None
+        and suffix is not None
+        and suffix not in {"Z", "+00:00", "-00:00"}
+    ):
         wall_source = re.sub(r"(Z|[+-]\d{2}:\d{2})$", "", cleaned)
         try:
             wall = datetime.fromisoformat(wall_source)
@@ -65,12 +78,11 @@ def _parse_datetime(
         except ValueError:
             pass
 
-    try:
-        parsed = datetime.fromisoformat(cleaned.replace("Z", "+00:00"))
-    except ValueError:
-        return None
     if timezone.is_naive(parsed):
-        parsed = timezone.make_aware(parsed, timezone.get_current_timezone())
+        if interpret_as_wall_time_tz is not None:
+            parsed = parsed.replace(tzinfo=interpret_as_wall_time_tz)
+        else:
+            parsed = timezone.make_aware(parsed, timezone.get_current_timezone())
     return parsed
 
 
