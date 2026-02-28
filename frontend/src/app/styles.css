@@ -933,6 +933,13 @@ body {
   gap: 12px;
 }
 
+.profile-title-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
 .graph-res-tabs {
   display: flex;
   gap: 8px;

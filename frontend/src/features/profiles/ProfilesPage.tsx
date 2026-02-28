@@ -218,11 +218,13 @@ export function ProfilesPage() {
         {profiles.map((profile) => (
           <li key={profile.id} className="profile-row">
             <div>
-              <strong>{profile.name}</strong>
+              <div className="profile-title-row">
+                <strong>{profile.name}</strong>
+                {profileId === profile.id ? <span className="completion-badge">active</span> : null}
+              </div>
               <span className="task-meta">Balance: {profile.gold_balance}</span>
             </div>
             <div className="tag-actions">
-              {profileId === profile.id ? <span className="task-meta">Active</span> : null}
               {isCloudMode && (
                 <>
                   <input
