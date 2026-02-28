@@ -1205,6 +1205,15 @@ body {
   border-color: #7a3a4d;
 }
 
+:root[data-theme="dark"] .modal-card .form-grid label,
+:root[data-theme="dark"] .modal-card .readonly-row,
+:root[data-theme="dark"] .modal-card .task-meta,
+:root[data-theme="dark"] .modal-card .checkbox-row,
+:root[data-theme="dark"] .modal-card .nested-list li,
+:root[data-theme="dark"] .modal-card .tag-row {
+  color: #d7e1f5;
+}
+
 :root[data-theme="dark"] .app-footnote a {
   color: #b9c7e3;
 }
