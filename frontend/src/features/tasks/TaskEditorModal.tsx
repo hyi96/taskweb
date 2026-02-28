@@ -88,11 +88,11 @@ function toDueAtIso(datePart: string, timePart: string) {
 }
 
 function formatLastAction(task: Task | null) {
-  if (!task?.last_action_at) {
-    return "Never";
-  }
   const label =
-    task.task_type === "habit" ? "Last incremented" : task.task_type === "reward" ? "Last claimed" : "Last completed";
+    task?.task_type === "habit" ? "Last incremented" : task?.task_type === "reward" ? "Last claimed" : "Last completed";
+  if (!task?.last_action_at) {
+    return `${label}: never`;
+  }
   return `${label}: ${new Date(task.last_action_at).toLocaleString()}`;
 }
 
