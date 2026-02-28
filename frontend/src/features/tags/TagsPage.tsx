@@ -70,7 +70,7 @@ export function TagsPage() {
               value={draftNames[tag.id] ?? tag.name}
               onChange={(event) => setDraftNames((prev) => ({ ...prev, [tag.id]: event.target.value }))}
             />
-            <div className="tag-actions">
+            <div className="tag-actions tag-actions--tags">
               <button
                 type="button"
                 className="action-button"

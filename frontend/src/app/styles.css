@@ -256,6 +256,7 @@ body {
 .profile-selector-inline-row label {
   font-size: 12px;
   color: #5b6477;
+  font-weight: 400;
 }
 
 .profile-selector-inline-row select {
@@ -270,7 +271,7 @@ body {
   color: inherit;
 }
 
-.profile-selector label {
+.profile-selector:not(.profile-selector-inline) label {
   font-size: 13px;
   color: #4b5567;
 }
@@ -901,10 +902,11 @@ body {
   flex-direction: row !important;
   align-items: center;
   gap: 8px;
+  flex-wrap: wrap;
 }
 
 .tag-row input {
-  flex: 1;
+  flex: 1 1 220px;
   min-width: 0;
   border: 1px solid #cad2e2;
   border-radius: 8px;
@@ -1119,10 +1121,26 @@ body {
     min-width: 0;
   }
 
-  .tag-actions {
+  .profile-row .tag-actions {
     margin-left: 0;
     justify-content: flex-start;
     width: 100%;
+  }
+
+  .tag-row {
+    align-items: stretch;
+  }
+
+  .tag-row input {
+    flex-basis: 100%;
+    width: 100%;
+    min-width: 0;
+  }
+
+  .tag-actions--tags {
+    width: 100%;
+    margin-left: 0;
+    justify-content: flex-end;
   }
 }
 
@@ -1157,7 +1175,7 @@ body {
 :root[data-theme="dark"] .task-meta,
 :root[data-theme="dark"] .auth-card p,
 :root[data-theme="dark"] .auth-theme-row,
-:root[data-theme="dark"] .profile-selector label {
+:root[data-theme="dark"] .profile-selector:not(.profile-selector-inline) label {
   color: #aeb9cf;
 }
 

@@ -261,7 +261,7 @@ export function ProfilesPage() {
                     disabled={busyProfileId === profile.id || !localSourceId}
                     onClick={() => void runLocalMigration(profile.id, profile.name)}
                   >
-                    Migrate local
+                    Import local
                   </button>
                 </>
               )}
