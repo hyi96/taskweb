@@ -1242,7 +1242,10 @@ export function TaskBoardPage() {
                     <strong className={done ? "task-title-completed" : undefined}>{task.title}</strong>
                     {done ? <span className="completion-badge">completed</span> : null}
                   </div>
-                  {task.due_at && <span className="task-meta">{formatTodoDueText(task.due_at)}</span>}
+                  <span className="task-meta">
+                    Gold {task.gold_delta}
+                    {task.due_at ? ` | ${formatTodoDueText(task.due_at)}` : ""}
+                  </span>
                   <button
                     className="action-button"
                     type="button"
