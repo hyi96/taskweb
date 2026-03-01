@@ -7,6 +7,10 @@ Task + habit tracker with a Django/DRF backend and a React frontend.
 - API health: https://taskweb-api.hyi96.dev/healthz/
 - You can sign up for a cloud account or use guest mode (local IndexedDB storage).
 
+## Desktop version
+- TaskApp (desktop): https://github.com/hyi96/TaskApp
+- `.taskapp` import/export is intended for portability between TaskApp and taskweb profiles.
+
 ## Stack
 - Backend: Django, DRF, PostgreSQL
 - Frontend: React, TypeScript, Vite

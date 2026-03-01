@@ -84,6 +84,10 @@ export function AppShell({ children }: PropsWithChildren) {
         <a href="https://github.com/hyi96/taskweb" target="_blank" rel="noreferrer">
           github repo
         </a>
+        <span> · </span>
+        <a href="https://github.com/hyi96/TaskApp" target="_blank" rel="noreferrer">
+          desktop version
+        </a>
       </footer>
     </div>
   );
