@@ -181,7 +181,14 @@ class ProfileViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=["get"], url_path="export-taskapp", url_name="export-taskapp")
     def export_taskapp(self, request, pk=None):
         profile = self.get_object()
-        archive_bytes, filename = TaskAppPortabilityService.export_profile_archive(profile=profile, user=request.user)
+        export_timezone = request.query_params.get("timezone")
+        if export_timezone is not None:
+            export_timezone = str(export_timezone).strip() or None
+        archive_bytes, filename = TaskAppPortabilityService.export_profile_archive(
+            profile=profile,
+            user=request.user,
+            export_timezone=export_timezone,
+        )
         response = HttpResponse(archive_bytes, content_type="application/zip")
         response["Content-Disposition"] = f'attachment; filename="{filename}"'
         return response

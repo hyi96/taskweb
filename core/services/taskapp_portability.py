@@ -43,6 +43,16 @@ def _iso_datetime(value: datetime | None) -> str | None:
     return value.astimezone(dt_timezone.utc).isoformat().replace("+00:00", "Z")
 
 
+def _iso_datetime_in_zone(value: datetime | None, *, target_tz: ZoneInfo | None) -> str | None:
+    if value is None:
+        return None
+    if timezone.is_naive(value):
+        value = timezone.make_aware(value, timezone.get_current_timezone())
+    if target_tz is not None:
+        return value.astimezone(target_tz).isoformat()
+    return value.astimezone(dt_timezone.utc).isoformat().replace("+00:00", "Z")
+
+
 def _parse_datetime(
     value: str | None,
     *,
@@ -134,8 +144,20 @@ class TaskAppPortabilityService:
     """Import/export between taskweb profile data and TaskApp ZIP archive format."""
 
     @classmethod
-    def export_profile_archive(cls, *, profile: Profile, user) -> tuple[bytes, str]:
+    def export_profile_archive(
+        cls,
+        *,
+        profile: Profile,
+        user,
+        export_timezone: str | None = None,
+    ) -> tuple[bytes, str]:
         _ensure_owner(profile, user)
+        due_export_tz: ZoneInfo | None = None
+        if export_timezone:
+            try:
+                due_export_tz = ZoneInfo(export_timezone)
+            except Exception:
+                due_export_tz = None
 
         payload = io.BytesIO()
         with zipfile.ZipFile(payload, "w", compression=zipfile.ZIP_DEFLATED) as archive:
@@ -148,7 +170,7 @@ class TaskAppPortabilityService:
             archive.writestr("metadata.json", json.dumps(metadata, indent=2))
 
             tags_data = cls._export_tags(profile)
-            tasks_data = cls._export_tasks(profile)
+            tasks_data = cls._export_tasks(profile, due_export_tz=due_export_tz)
             rewards_data = cls._export_rewards(profile)
             user_data = {"Id": str(profile.id), "Gold": float(profile.gold_balance)}
 
@@ -203,7 +225,7 @@ class TaskAppPortabilityService:
         return [{"Id": str(tag.id), "Name": tag.name} for tag in tags]
 
     @classmethod
-    def _export_tasks(cls, profile: Profile) -> list[dict]:
+    def _export_tasks(cls, profile: Profile, *, due_export_tz: ZoneInfo | None = None) -> list[dict]:
         tasks = (
             Task.objects.filter(profile=profile)
             .exclude(task_type=Task.TaskType.REWARD)
@@ -228,7 +250,9 @@ class TaskAppPortabilityService:
                 "IsHidden": bool(task.is_hidden),
             }
             if task.task_type == Task.TaskType.TODO:
-                entry["DueDate"] = _iso_datetime(task.due_at)
+                # TaskApp consumes todo due dates as wall-time with timezone offset.
+                # Exporting in the requester's timezone preserves the expected due wall-time in TaskApp.
+                entry["DueDate"] = _iso_datetime_in_zone(task.due_at, target_tz=due_export_tz)
                 entry["Checklist"] = [
                     {
                         "Id": str(item.id),

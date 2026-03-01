@@ -96,6 +96,27 @@ class TaskAppPortabilityServiceTests(TestCase):
             Task.objects.filter(profile=imported_profile, task_type=Task.TaskType.REWARD, title="Coffee").exists()
         )
 
+    def test_export_todo_due_date_uses_requested_export_timezone_offset(self):
+        due_utc = timezone.make_aware(datetime(2026, 1, 15, 7, 59, 59))
+        Task.objects.create(
+            profile=self.profile,
+            task_type=Task.TaskType.TODO,
+            title="Timezone export todo",
+            gold_delta=Decimal("1.00"),
+            due_at=due_utc,
+        )
+
+        archive_bytes, _ = TaskAppPortabilityService.export_profile_archive(
+            profile=self.profile,
+            user=self.user,
+            export_timezone="America/Los_Angeles",
+        )
+        with zipfile.ZipFile(io.BytesIO(archive_bytes), "r") as archive:
+            tasks_payload = json.loads(archive.read("data/tasks.json"))
+
+        todo = next(item for item in tasks_payload if item.get("$type") == "Todo")
+        self.assertEqual(todo["DueDate"], "2026-01-14T23:59:59-08:00")
+
     def test_import_numeric_weekly_cadence_does_not_false_positive_in_new_day_prompt(self):
         now = timezone.make_aware(datetime(2026, 2, 21, 12, 0, 0))
         archive_buffer = io.BytesIO()

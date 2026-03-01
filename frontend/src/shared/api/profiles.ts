@@ -45,7 +45,9 @@ export type TaskAppImportResult = {
 };
 
 export async function exportProfileTaskApp(profileId: string): Promise<Blob> {
-  return apiRequest<Blob>(`/api/profiles/${profileId}/export-taskapp/`, {
+  const browserTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const query = browserTimezone ? `?timezone=${encodeURIComponent(browserTimezone)}` : "";
+  return apiRequest<Blob>(`/api/profiles/${profileId}/export-taskapp/${query}`, {
     method: "GET",
     responseType: "blob"
   });
