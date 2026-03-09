@@ -169,6 +169,100 @@ class TaskAppPortabilityServiceTests(TestCase):
         prompts = get_uncompleted_dailies_from_previous_period(profile=imported_profile, user=self.user, timestamp=now)
         self.assertFalse(any(item["title"] == "practice driving" for item in prompts))
 
+    def test_import_daily_derives_last_completion_period_from_last_completed_date(self):
+        archive_buffer = io.BytesIO()
+        with zipfile.ZipFile(archive_buffer, "w", zipfile.ZIP_DEFLATED) as archive:
+            archive.writestr(
+                "metadata.json",
+                json.dumps({"ExportedAt": "2026-02-21T00:00:00Z", "AppVersion": "1.0.0", "UserName": "Main"}),
+            )
+            archive.writestr("data/tags.json", "[]")
+            archive.writestr("data/rewards.json", "[]")
+            archive.writestr("data/user.json", json.dumps({"Id": str(self.profile.id), "Gold": 0}))
+            archive.writestr(
+                "data/tasks.json",
+                json.dumps(
+                    [
+                        {
+                            "$type": "Daily",
+                            "Id": "12111111-1111-1111-1111-111111111111",
+                            "CreatedAt": "2026-02-01T00:00:00Z",
+                            "Title": "derived period daily",
+                            "Notes": "",
+                            "Tags": [],
+                            "LastCompletedDate": "2026-02-18T08:00:00Z",
+                            "GoldReward": 1,
+                            "IsHidden": False,
+                            "Cadence": 1,
+                            "RepeatEvery": 1,
+                            "CurrentStreak": 5,
+                            "BestStreak": 5,
+                            "LastCompletionPeriod": None,
+                            "RewardGoalFulfilled": False,
+                            "AutocompleteTimeThresholdTicks": None,
+                            "StreakBonusRules": [],
+                        }
+                    ]
+                ),
+            )
+
+        imported_profile = Profile.objects.create(account=self.user, name="Imported Derived Weekly")
+        TaskAppPortabilityService.import_profile_archive(
+            profile=imported_profile,
+            user=self.user,
+            archive_file=io.BytesIO(archive_buffer.getvalue()),
+        )
+
+        imported_daily = Task.objects.get(profile=imported_profile, title="derived period daily")
+        self.assertEqual(imported_daily.last_completion_period.isoformat(), "2026-02-16")
+
+    def test_import_daily_prefers_derived_period_over_stale_payload_period(self):
+        archive_buffer = io.BytesIO()
+        with zipfile.ZipFile(archive_buffer, "w", zipfile.ZIP_DEFLATED) as archive:
+            archive.writestr(
+                "metadata.json",
+                json.dumps({"ExportedAt": "2026-02-21T00:00:00Z", "AppVersion": "1.0.0", "UserName": "Main"}),
+            )
+            archive.writestr("data/tags.json", "[]")
+            archive.writestr("data/rewards.json", "[]")
+            archive.writestr("data/user.json", json.dumps({"Id": str(self.profile.id), "Gold": 0}))
+            archive.writestr(
+                "data/tasks.json",
+                json.dumps(
+                    [
+                        {
+                            "$type": "Daily",
+                            "Id": "13111111-1111-1111-1111-111111111111",
+                            "CreatedAt": "2026-02-01T00:00:00Z",
+                            "Title": "stale period daily",
+                            "Notes": "",
+                            "Tags": [],
+                            "LastCompletedDate": "2026-02-18T08:00:00Z",
+                            "GoldReward": 1,
+                            "IsHidden": False,
+                            "Cadence": 1,
+                            "RepeatEvery": 1,
+                            "CurrentStreak": 5,
+                            "BestStreak": 5,
+                            "LastCompletionPeriod": "2026-02-18",
+                            "RewardGoalFulfilled": False,
+                            "AutocompleteTimeThresholdTicks": None,
+                            "StreakBonusRules": [],
+                        }
+                    ]
+                ),
+            )
+
+        imported_profile = Profile.objects.create(account=self.user, name="Imported Stale Weekly")
+        TaskAppPortabilityService.import_profile_archive(
+            profile=imported_profile,
+            user=self.user,
+            archive_file=io.BytesIO(archive_buffer.getvalue()),
+        )
+
+        imported_daily = Task.objects.get(profile=imported_profile, title="stale period daily")
+        self.assertEqual(imported_daily.last_completion_period.isoformat(), "2026-02-16")
+
     def test_import_todo_due_date_uses_import_timezone_wall_time(self):
         archive_buffer = io.BytesIO()
         with zipfile.ZipFile(archive_buffer, "w", zipfile.ZIP_DEFLATED) as archive:

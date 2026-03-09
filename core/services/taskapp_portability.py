@@ -16,6 +16,7 @@ from django.db import transaction
 from django.utils import timezone
 
 from core.models import ChecklistItem, LogEntry, Profile, StreakBonusRule, Tag, Task
+from core.services.periods import daily_period_start
 
 
 TASKAPP_LOG_TYPE_MAP = {
@@ -129,6 +130,26 @@ def _ticks_to_duration(value: int | None):
     if value is None:
         return None
     return timedelta(microseconds=int(value / 10))
+
+
+def _derive_daily_completion_period(
+    *,
+    completed_at: datetime | None,
+    created_at: datetime | None,
+    cadence: str | None,
+    repeat_every: int,
+) -> date | None:
+    if completed_at is None:
+        return None
+    target_date = timezone.localtime(completed_at).date()
+    anchor_source = created_at or completed_at
+    anchor_date = timezone.localtime(anchor_source).date()
+    return daily_period_start(
+        target_date=target_date,
+        cadence=cadence or Task.Cadence.DAY,
+        repeat_every=repeat_every,
+        anchor_date=anchor_date,
+    )
 
 
 @dataclass
@@ -619,6 +640,7 @@ class TaskAppPortabilityService:
         title = (payload.get("Title") or "").strip()
         if not title:
             return None
+        created_at = _parse_datetime(payload.get("CreatedAt"))
 
         task = Task(
             id=cls._safe_uuid_for(Task, payload.get("Id")),
@@ -646,7 +668,14 @@ class TaskAppPortabilityService:
             task.repeat_every = max(1, int(payload.get("RepeatEvery") or 1))
             task.current_streak = max(0, int(payload.get("CurrentStreak") or 0))
             task.best_streak = max(task.current_streak, int(payload.get("BestStreak") or 0))
-            task.last_completion_period = _parse_date(payload.get("LastCompletionPeriod"))
+            completed_at = _parse_datetime(payload.get("LastCompletedDate"))
+            derived_period = _derive_daily_completion_period(
+                completed_at=completed_at,
+                created_at=created_at,
+                cadence=task.repeat_cadence,
+                repeat_every=task.repeat_every,
+            )
+            task.last_completion_period = derived_period or _parse_date(payload.get("LastCompletionPeriod"))
             if payload.get("AutocompleteTimeThresholdTicks") is not None:
                 task.autocomplete_time_threshold = _ticks_to_duration(int(payload.get("AutocompleteTimeThresholdTicks")))
             if task.last_completion_period:
@@ -661,7 +690,6 @@ class TaskAppPortabilityService:
 
         task.full_clean()
         task.save()
-        created_at = _parse_datetime(payload.get("CreatedAt"))
         if created_at is not None:
             Task.objects.filter(id=task.id).update(created_at=created_at)
             task.created_at = created_at
