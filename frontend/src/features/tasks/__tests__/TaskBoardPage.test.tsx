@@ -1,7 +1,7 @@
 import { cleanup, fireEvent, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { renderWithQueryClient } from "../../../test-utils/render";
-import { TaskBoardPage, periodEndForDaily, sortTasks } from "../TaskBoardPage";
+import { TaskBoardPage, isDailyCompletedForCurrentPeriod, periodEndForDaily, sortTasks } from "../TaskBoardPage";
 import type { Task } from "../../../shared/types/task";
 
 const fetchTasksMock = vi.fn();
@@ -198,6 +198,35 @@ describe("task helpers", () => {
     });
     const end = periodEndForDaily(daily);
     expect(end.toISOString().slice(0, 10)).toBe("2026-02-22");
+    vi.useRealTimers();
+  });
+
+  it("isDailyCompletedForCurrentPeriod stays correct across DST start", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-03-09T20:27:00Z"));
+
+    const completedToday = makeTask({
+      id: "dst-today",
+      task_type: "daily",
+      title: "Completed today",
+      repeat_cadence: "day",
+      repeat_every: 1,
+      created_at: "2026-03-01T00:00:00Z",
+      last_completion_period: "2026-03-09"
+    });
+    const completedYesterday = makeTask({
+      id: "dst-yesterday",
+      task_type: "daily",
+      title: "Completed yesterday",
+      repeat_cadence: "day",
+      repeat_every: 1,
+      created_at: "2026-03-01T00:00:00Z",
+      last_completion_period: "2026-03-08"
+    });
+
+    expect(isDailyCompletedForCurrentPeriod(completedToday)).toBe(true);
+    expect(isDailyCompletedForCurrentPeriod(completedYesterday)).toBe(false);
+
     vi.useRealTimers();
   });
 });

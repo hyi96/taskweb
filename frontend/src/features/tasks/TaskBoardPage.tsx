@@ -374,15 +374,13 @@ export function currentDailyPeriodStart(task: Task) {
   anchor.setHours(0, 0, 0, 0);
 
   if (cadence === "day") {
-    const dayMs = 24 * 60 * 60 * 1000;
-    const diffDays = Math.max(0, Math.floor((now.getTime() - anchor.getTime()) / dayMs));
+    const diffDays = Math.max(0, diffCalendarDays(anchor, now));
     return addDays(anchor, Math.floor(diffDays / every) * every);
   }
   if (cadence === "week") {
     const nowStart = startOfWeekMonday(now);
     const anchorStart = startOfWeekMonday(anchor);
-    const dayMs = 24 * 60 * 60 * 1000;
-    const weeksDiff = Math.max(0, Math.floor((nowStart.getTime() - anchorStart.getTime()) / dayMs / 7));
+    const weeksDiff = Math.max(0, Math.floor(diffCalendarDays(anchorStart, nowStart) / 7));
     return addDays(anchorStart, Math.floor(weeksDiff / every) * every * 7);
   }
   if (cadence === "month") {
@@ -424,6 +422,12 @@ export function addDays(date: Date, days: number) {
   return copy;
 }
 
+export function diffCalendarDays(start: Date, end: Date) {
+  const startUtc = Date.UTC(start.getFullYear(), start.getMonth(), start.getDate());
+  const endUtc = Date.UTC(end.getFullYear(), end.getMonth(), end.getDate());
+  return Math.floor((endUtc - startUtc) / (24 * 60 * 60 * 1000));
+}
+
 export function addMonths(date: Date, months: number) {
   return new Date(date.getFullYear(), date.getMonth() + months, 1);
 }
@@ -441,8 +445,7 @@ export function periodEndForDaily(task: Task) {
   anchor.setHours(0, 0, 0, 0);
 
   if (cadence === "day") {
-    const dayMs = 24 * 60 * 60 * 1000;
-    const diffDays = Math.max(0, Math.floor((now.getTime() - anchor.getTime()) / dayMs));
+    const diffDays = Math.max(0, diffCalendarDays(anchor, now));
     const block = Math.floor(diffDays / every);
     return addDays(anchor, (block + 1) * every - 1);
   }
@@ -450,8 +453,7 @@ export function periodEndForDaily(task: Task) {
   if (cadence === "week") {
     const nowStart = startOfWeekMonday(now);
     const anchorStart = startOfWeekMonday(anchor);
-    const dayMs = 24 * 60 * 60 * 1000;
-    const weeksDiff = Math.max(0, Math.floor((nowStart.getTime() - anchorStart.getTime()) / dayMs / 7));
+    const weeksDiff = Math.max(0, Math.floor(diffCalendarDays(anchorStart, nowStart) / 7));
     const block = Math.floor(weeksDiff / every);
     return addDays(anchorStart, (block + 1) * every * 7 - 1);
   }
