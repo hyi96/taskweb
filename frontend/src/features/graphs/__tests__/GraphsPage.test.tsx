@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { aggregateValues, buildSearchOptions, createBuckets, durationToMinutes } from "../GraphsPage";
+import { aggregateValues, buildSearchOptions, createBuckets, durationToMinutes, getActivityInstances } from "../GraphsPage";
 import type { LogEntry } from "../../../shared/types/log";
 import type { Task } from "../../../shared/types/task";
 
@@ -157,5 +157,30 @@ describe("graph helpers", () => {
       targetType: "activity",
       activityTitle: "manual deep work"
     });
+  });
+
+  it("keeps linked and manual activity titles in the activity dropdown instances", () => {
+    const logs: LogEntry[] = [
+      makeLog({
+        id: "l1",
+        timestamp: "2026-02-21T10:00:00Z",
+        type: "activity_duration",
+        task_id: "task-1",
+        title_snapshot: "do coding puzzles",
+        duration: "00:30:00"
+      }),
+      makeLog({
+        id: "l2",
+        timestamp: "2026-02-21T11:00:00Z",
+        type: "activity_duration",
+        title_snapshot: "manual deep work",
+        duration: "00:15:00"
+      })
+    ];
+
+    expect(getActivityInstances(logs)).toEqual([
+      { id: null, name: "do coding puzzles", activityTitle: "do coding puzzles" },
+      { id: null, name: "manual deep work", activityTitle: "manual deep work" }
+    ]);
   });
 });

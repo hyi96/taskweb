@@ -156,14 +156,26 @@ export function buildSearchOptions(tasks: Task[], logs: LogEntry[]): SearchOptio
   return [...fromTasks, ...activities];
 }
 
+export function getActivityInstances(logs: LogEntry[]): TargetInstance[] {
+  const seen = new Set<string>();
+  return logs
+    .filter((log) => log.type === "activity_duration" && log.title_snapshot.trim())
+    .map((log) => log.title_snapshot.trim())
+    .filter((name) => {
+      const key = name.toLowerCase();
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    })
+    .map((name) => ({ id: null, name, activityTitle: name }));
+}
+
 export function getInstances(tasks: Task[], logs: LogEntry[], targetType: TargetType): TargetInstance[] {
   if (targetType === "gold") {
     return [{ id: null, name: "All Gold" }];
   }
   if (targetType === "activity") {
-    return buildSearchOptions(tasks, logs)
-      .filter((x) => x.targetType === "activity")
-      .map((x) => ({ id: null, name: x.name, activityTitle: x.activityTitle }));
+    return getActivityInstances(logs);
   }
   return tasks.filter((task) => task.task_type === targetType).map((task) => ({ id: task.id, name: task.title }));
 }
