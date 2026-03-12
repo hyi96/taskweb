@@ -9,7 +9,7 @@ from django.test import TestCase
 from django.utils import timezone
 
 from core.models import LogEntry, Profile, Task
-from core.services.task_actions import get_uncompleted_dailies_from_previous_period
+from core.services.task_actions import get_uncompleted_dailies_from_previous_period, start_new_day
 from core.services.taskapp_portability import TaskAppPortabilityService
 
 
@@ -262,6 +262,71 @@ class TaskAppPortabilityServiceTests(TestCase):
 
         imported_daily = Task.objects.get(profile=imported_profile, title="stale period daily")
         self.assertEqual(imported_daily.last_completion_period.isoformat(), "2026-02-16")
+
+    def test_imported_daily_can_roll_over_into_new_day_backfill(self):
+        now = timezone.make_aware(datetime(2026, 2, 21, 12, 0, 0))
+        archive_buffer = io.BytesIO()
+        with zipfile.ZipFile(archive_buffer, "w", zipfile.ZIP_DEFLATED) as archive:
+            archive.writestr(
+                "metadata.json",
+                json.dumps({"ExportedAt": "2026-02-21T00:00:00Z", "AppVersion": "1.0.0", "UserName": "Main"}),
+            )
+            archive.writestr("data/tags.json", "[]")
+            archive.writestr("data/rewards.json", "[]")
+            archive.writestr("data/user.json", json.dumps({"Id": str(self.profile.id), "Gold": 0}))
+            archive.writestr(
+                "data/tasks.json",
+                json.dumps(
+                    [
+                        {
+                            "$type": "Daily",
+                            "Id": "14111111-1111-1111-1111-111111111111",
+                            "CreatedAt": "2026-02-01T00:00:00Z",
+                            "Title": "rollover daily",
+                            "Notes": "",
+                            "Tags": [],
+                            "LastCompletedDate": "2026-02-19T08:00:00Z",
+                            "GoldReward": 1,
+                            "IsHidden": False,
+                            "Cadence": 0,
+                            "RepeatEvery": 1,
+                            "CurrentStreak": 3,
+                            "BestStreak": 3,
+                            "LastCompletionPeriod": "2026-02-19",
+                            "RewardGoalFulfilled": False,
+                            "AutocompleteTimeThresholdTicks": None,
+                            "StreakBonusRules": [],
+                        }
+                    ]
+                ),
+            )
+
+        imported_profile = Profile.objects.create(account=self.user, name="Imported Rollover")
+        TaskAppPortabilityService.import_profile_archive(
+            profile=imported_profile,
+            user=self.user,
+            archive_file=io.BytesIO(archive_buffer.getvalue()),
+        )
+
+        imported_daily = Task.objects.get(profile=imported_profile, title="rollover daily")
+        self.assertEqual(imported_daily.last_completion_period.isoformat(), "2026-02-19")
+
+        preview = get_uncompleted_dailies_from_previous_period(profile=imported_profile, user=self.user, timestamp=now)
+        self.assertEqual(len(preview), 1)
+        self.assertEqual(preview[0]["id"], str(imported_daily.id))
+        self.assertEqual(preview[0]["previous_period_start"], "2026-02-20")
+
+        result = start_new_day(
+            profile=imported_profile,
+            user=self.user,
+            checked_daily_ids=[imported_daily.id],
+            timestamp=now,
+        )
+        self.assertEqual(result["updated_count"], 1)
+
+        imported_daily.refresh_from_db()
+        self.assertEqual(imported_daily.last_completion_period.isoformat(), "2026-02-20")
+        self.assertEqual(imported_daily.current_streak, 4)
 
     def test_import_todo_due_date_uses_import_timezone_wall_time(self):
         archive_buffer = io.BytesIO()
