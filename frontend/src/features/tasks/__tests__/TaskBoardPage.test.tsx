@@ -1,11 +1,13 @@
-import { cleanup, fireEvent, screen, waitFor } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { act, cleanup, fireEvent, screen, waitFor } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { renderWithQueryClient } from "../../../test-utils/render";
 import { TaskBoardPage, isDailyCompletedForCurrentPeriod, periodEndForDaily, sortTasks } from "../TaskBoardPage";
 import type { Task } from "../../../shared/types/task";
 
 const fetchTasksMock = vi.fn();
 const fetchTagsMock = vi.fn();
+const fetchNewDayPreviewMock = vi.fn();
+const startNewDayMock = vi.fn();
 const habitIncrementMock = vi.fn();
 const updateTaskMock = vi.fn();
 
@@ -25,8 +27,8 @@ vi.mock("../../../shared/repositories/client", () => ({
   replaceStreakRules: vi.fn(),
   fetchTasks: (...args: unknown[]) => fetchTasksMock(...args),
   habitIncrement: (...args: unknown[]) => habitIncrementMock(...args),
-  fetchNewDayPreview: vi.fn().mockResolvedValue({ profile_id: "11111111-1111-1111-1111-111111111111", dailies: [] }),
-  startNewDay: vi.fn().mockResolvedValue({ updated_count: 0 }),
+  fetchNewDayPreview: (...args: unknown[]) => fetchNewDayPreviewMock(...args),
+  startNewDay: (...args: unknown[]) => startNewDayMock(...args),
   dailyComplete: vi.fn(),
   todoComplete: vi.fn(),
   rewardClaim: vi.fn(),
@@ -75,9 +77,26 @@ function makeTask(partial: Partial<Task> & Pick<Task, "id" | "task_type" | "titl
   };
 }
 
+async function flushScheduledUiWork() {
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(1);
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+}
+
 afterEach(() => {
   cleanup();
   vi.clearAllMocks();
+  window.localStorage.clear();
+});
+
+beforeEach(() => {
+  fetchNewDayPreviewMock.mockResolvedValue({
+    profile_id: "11111111-1111-1111-1111-111111111111",
+    dailies: []
+  });
+  startNewDayMock.mockResolvedValue({ updated_count: 0 });
 });
 
 describe("TaskBoardPage", () => {
@@ -145,6 +164,47 @@ describe("TaskBoardPage", () => {
     await waitFor(() => {
       expect(screen.queryByRole("button", { name: "Set as current activity" })).toBeNull();
     });
+  });
+
+  it("can show new day modal again after local day rolls over", async () => {
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(new Date(2026, 2, 12, 12, 0, 0));
+      fetchTasksMock.mockResolvedValue([]);
+      fetchTagsMock.mockResolvedValue([]);
+      fetchNewDayPreviewMock.mockResolvedValue({
+        profile_id: "11111111-1111-1111-1111-111111111111",
+        dailies: [
+          {
+            id: "d1",
+            title: "Carry over daily",
+            previous_period_start: "2026-03-11",
+            last_completion_period: null,
+            repeat_cadence: "day",
+            repeat_every: 1
+          }
+        ]
+      });
+
+      renderWithQueryClient(<TaskBoardPage />);
+
+      await flushScheduledUiWork();
+
+      expect(screen.getByRole("heading", { name: "New Day" })).toBeTruthy();
+      fireEvent.click(screen.getByRole("button", { name: "Close" }));
+      expect(screen.queryByRole("heading", { name: "New Day" })).toBeNull();
+
+      await act(async () => {
+        vi.setSystemTime(new Date(2026, 2, 13, 9, 0, 0));
+        fireEvent.focus(window);
+      });
+      await flushScheduledUiWork();
+
+      expect(fetchNewDayPreviewMock).toHaveBeenCalledTimes(2);
+      expect(screen.getByRole("heading", { name: "New Day" })).toBeTruthy();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
 

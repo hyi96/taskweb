@@ -541,6 +541,7 @@ export function TaskBoardPage() {
   const { setCurrentActivity } = useCurrentActivity();
   const queryClient = useQueryClient();
   const tasksKey = ["tasks", profileId] as const;
+  const [currentLocalDay, setCurrentLocalDay] = useState(localDateString());
 
   const [search, setSearch] = useState("");
   const [habitFilter, setHabitFilter] = useState<HabitFilter>("all");
@@ -577,7 +578,7 @@ export function TaskBoardPage() {
     enabled: Boolean(profileId)
   });
   const newDayQuery = useQuery({
-    queryKey: ["new-day", profileId],
+    queryKey: ["new-day", profileId, currentLocalDay],
     queryFn: () => fetchNewDayPreview(profileId),
     enabled: Boolean(profileId)
   });
@@ -665,6 +666,35 @@ export function TaskBoardPage() {
   }, [checkedNewDayIds]);
 
   useEffect(() => {
+    const syncLocalDay = () => {
+      setCurrentLocalDay((previous) => {
+        const next = localDateString();
+        return previous === next ? previous : next;
+      });
+    };
+
+    const scheduleNextTick = () => {
+      const now = new Date();
+      const nextMidnight = new Date(now);
+      nextMidnight.setHours(24, 0, 0, 0);
+      return window.setTimeout(() => {
+        syncLocalDay();
+        scheduleId = scheduleNextTick();
+      }, nextMidnight.getTime() - now.getTime());
+    };
+
+    let scheduleId = scheduleNextTick();
+    window.addEventListener("focus", syncLocalDay);
+    document.addEventListener("visibilitychange", syncLocalDay);
+
+    return () => {
+      window.clearTimeout(scheduleId);
+      window.removeEventListener("focus", syncLocalDay);
+      document.removeEventListener("visibilitychange", syncLocalDay);
+    };
+  }, []);
+
+  useEffect(() => {
     setShowNewDayModal(false);
     setCheckedNewDayIds([]);
     checkedNewDayIdsRef.current = [];
@@ -731,7 +761,7 @@ export function TaskBoardPage() {
     setCheckedNewDayIds([]);
     checkedNewDayIdsRef.current = [];
     markNewDayModalSeenToday(profileId);
-  }, [newDayItems, profileId]);
+  }, [newDayItems, profileId, currentLocalDay]);
 
   const tasks = tasksQuery.data ?? [];
   const grouped = useMemo(
