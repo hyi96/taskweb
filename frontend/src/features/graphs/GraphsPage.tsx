@@ -144,7 +144,7 @@ export function buildSearchOptions(tasks: Task[], logs: LogEntry[]): SearchOptio
   }));
   const seen = new Set<string>();
   const activities = logs
-    .filter((log) => log.type === "activity_duration" && log.title_snapshot.trim())
+    .filter((log) => log.type === "activity_duration" && !log.task_id && log.title_snapshot.trim())
     .map((log) => log.title_snapshot.trim())
     .filter((name) => {
       const key = name.toLowerCase();

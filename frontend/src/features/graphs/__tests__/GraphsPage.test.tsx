@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { aggregateValues, createBuckets, durationToMinutes } from "../GraphsPage";
+import { aggregateValues, buildSearchOptions, createBuckets, durationToMinutes } from "../GraphsPage";
 import type { LogEntry } from "../../../shared/types/log";
 import type { Task } from "../../../shared/types/task";
 
@@ -128,5 +128,34 @@ describe("graph helpers", () => {
     expect(durationToMinutes("01:30:00")).toBe(90);
     expect(durationToMinutes("00:00:30")).toBeCloseTo(0.5, 5);
     expect(durationToMinutes(null)).toBe(0);
+  });
+
+  it("omits linked activity logs from search suggestions but keeps manual activity titles", () => {
+    const task = makeTask({ id: "task-1", task_type: "todo", title: "do coding puzzles" });
+    const logs: LogEntry[] = [
+      makeLog({
+        id: "l1",
+        timestamp: "2026-02-21T10:00:00Z",
+        type: "activity_duration",
+        task_id: "task-1",
+        title_snapshot: "do coding puzzles",
+        duration: "00:30:00"
+      }),
+      makeLog({
+        id: "l2",
+        timestamp: "2026-02-21T11:00:00Z",
+        type: "activity_duration",
+        title_snapshot: "manual deep work",
+        duration: "00:15:00"
+      })
+    ];
+
+    const options = buildSearchOptions([task], logs);
+    expect(options.filter((option) => option.name === "do coding puzzles")).toHaveLength(1);
+    expect(options.find((option) => option.name === "do coding puzzles")?.targetType).toBe("todo");
+    expect(options.find((option) => option.name === "manual deep work")).toMatchObject({
+      targetType: "activity",
+      activityTitle: "manual deep work"
+    });
   });
 });

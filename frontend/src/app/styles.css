@@ -1220,6 +1220,25 @@ body {
   color: #dbe5f8;
 }
 
+:root[data-theme="dark"] .graph-controls select option,
+:root[data-theme="dark"] .auth-theme-row select option,
+:root[data-theme="dark"] .session-box select option,
+:root[data-theme="dark"] .profile-selector select option {
+  background: #101827;
+  color: #dbe5f8;
+}
+
+:root[data-theme="dark"] .graph-search-results {
+  background: #101827;
+  border-color: #344766;
+}
+
+:root[data-theme="dark"] .graph-search-results li {
+  background: #101827;
+  color: #dbe5f8;
+  border-bottom-color: #24344f;
+}
+
 :root[data-theme="dark"] .top-nav a.active,
 :root[data-theme="dark"] .tab.active {
   background: #1e3b78;
