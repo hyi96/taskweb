@@ -6,7 +6,6 @@ import type { Task } from "../../../shared/types/task";
 function makeTask(partial: Partial<Task> & Pick<Task, "id" | "task_type" | "title">): Task {
   const { id, task_type, title, ...rest } = partial;
   return {
-    ...rest,
     id,
     profile_id: "11111111-1111-1111-1111-111111111111",
     task_type,
@@ -35,7 +34,8 @@ function makeTask(partial: Partial<Task> & Pick<Task, "id" | "task_type" | "titl
     total_actions_count: 0,
     last_action_at: null,
     created_at: "2026-02-20T00:00:00Z",
-    updated_at: "2026-02-20T00:00:00Z"
+    updated_at: "2026-02-20T00:00:00Z",
+    ...rest
   };
 }
 
@@ -59,10 +59,10 @@ function makeLog(partial: Partial<LogEntry> & Pick<LogEntry, "id" | "timestamp" 
 describe("graph helpers", () => {
   it("creates expected bucket counts for each resolution", () => {
     expect(createBuckets("hour")).toHaveLength(72);
-    expect(createBuckets("day")).toHaveLength(14);
-    expect(createBuckets("week")).toHaveLength(8);
+    expect(createBuckets("day")).toHaveLength(16);
+    expect(createBuckets("week")).toHaveLength(12);
     expect(createBuckets("month")).toHaveLength(12);
-    expect(createBuckets("year")).toHaveLength(4);
+    expect(createBuckets("year")).toHaveLength(8);
   });
 
   it("aggregates habit count_delta and activity time_spent by bucket", () => {
@@ -128,6 +128,39 @@ describe("graph helpers", () => {
     expect(durationToMinutes("01:30:00")).toBe(90);
     expect(durationToMinutes("00:00:30")).toBeCloseTo(0.5, 5);
     expect(durationToMinutes(null)).toBe(0);
+  });
+
+  it("aggregates todo created and completed into the same metric", () => {
+    const buckets = [
+      {
+        start: new Date("2026-02-20T00:00:00Z"),
+        end: new Date("2026-02-21T00:00:00Z"),
+        label: "b1"
+      },
+      {
+        start: new Date("2026-02-21T00:00:00Z"),
+        end: new Date("2026-02-22T00:00:00Z"),
+        label: "b2"
+      }
+    ];
+    const todo = makeTask({
+      id: "todo-1",
+      task_type: "todo",
+      title: "Inbox",
+      created_at: "2026-02-20T10:00:00Z",
+      completed_at: "2026-02-21T12:00:00Z",
+      is_done: true
+    });
+
+    const values = aggregateValues(
+      buckets,
+      [],
+      [todo],
+      "todo",
+      "created_completed",
+      { id: "todo-1", name: "Inbox" }
+    );
+    expect(values).toEqual([1, 1]);
   });
 
   it("omits linked activity logs from search suggestions but keeps manual activity titles", () => {

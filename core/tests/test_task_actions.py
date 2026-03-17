@@ -187,6 +187,28 @@ class TestTaskActionsService(TestCase):
         habit.refresh_from_db()
         self.assertEqual(habit.current_count, Decimal("0.00"))
 
+    def test_refresh_profile_period_state_resets_daily_streak_when_more_than_one_period_behind(self):
+        daily = Task.objects.create(
+            profile=self.profile,
+            task_type=Task.TaskType.DAILY,
+            title="Stale daily",
+            repeat_cadence=Task.Cadence.DAY,
+            repeat_every=1,
+            gold_delta=Decimal("1.00"),
+            current_streak=4,
+            best_streak=4,
+            last_completion_period=date(2026, 2, 18),
+        )
+        Task.objects.filter(id=daily.id).update(created_at=timezone.make_aware(timezone.datetime(2026, 2, 1, 8, 0, 0)))
+
+        refresh_profile_period_state(
+            profile=self.profile,
+            user=self.user,
+            timestamp=timezone.make_aware(timezone.datetime(2026, 2, 21, 8, 0, 0)),
+        )
+        daily.refresh_from_db()
+        self.assertEqual(daily.current_streak, 0)
+
     def test_new_day_preview_and_start_can_backfill_previous_period_daily(self):
         daily = Task.objects.create(
             profile=self.profile,
@@ -201,6 +223,14 @@ class TestTaskActionsService(TestCase):
         )
         Task.objects.filter(id=daily.id).update(created_at=timezone.make_aware(timezone.datetime(2026, 2, 1, 8, 0, 0)))
         daily.refresh_from_db()
+        refresh_profile_period_state(
+            profile=self.profile,
+            user=self.user,
+            timestamp=timezone.make_aware(timezone.datetime(2026, 2, 21, 8, 0, 0)),
+        )
+        daily.refresh_from_db()
+        self.assertEqual(daily.current_streak, 3)
+
         preview = get_uncompleted_dailies_from_previous_period(
             profile=self.profile,
             user=self.user,

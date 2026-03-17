@@ -82,6 +82,18 @@ function dateOnlyFromIso(iso: string) {
   return iso.slice(0, 10);
 }
 
+function localDateKey(value: Date) {
+  const year = value.getFullYear();
+  const month = String(value.getMonth() + 1).padStart(2, "0");
+  const day = String(value.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function dateFromKey(key: string) {
+  const [year, month, day] = key.split("-").map(Number);
+  return new Date(year, (month || 1) - 1, day || 1);
+}
+
 function durationString(totalSeconds: number) {
   const safe = Math.max(0, Math.floor(totalSeconds));
   const h = Math.floor(safe / 3600);
@@ -134,13 +146,17 @@ function periodStartForDaily(task: Task, targetDate = new Date()) {
   anchor.setHours(0, 0, 0, 0);
 
   if (cadence === "day") {
-    const diffDays = Math.max(0, Math.floor((now.getTime() - anchor.getTime()) / 86400000));
+    const nowUtc = Date.UTC(now.getFullYear(), now.getMonth(), now.getDate());
+    const anchorUtc = Date.UTC(anchor.getFullYear(), anchor.getMonth(), anchor.getDate());
+    const diffDays = Math.max(0, Math.floor((nowUtc - anchorUtc) / 86400000));
     return addDays(anchor, Math.floor(diffDays / every) * every);
   }
   if (cadence === "week") {
     const nowStart = startOfWeekMonday(now);
     const anchorStart = startOfWeekMonday(anchor);
-    const weeksDiff = Math.max(0, Math.floor((nowStart.getTime() - anchorStart.getTime()) / 86400000 / 7));
+    const nowStartUtc = Date.UTC(nowStart.getFullYear(), nowStart.getMonth(), nowStart.getDate());
+    const anchorStartUtc = Date.UTC(anchorStart.getFullYear(), anchorStart.getMonth(), anchorStart.getDate());
+    const weeksDiff = Math.max(0, Math.floor((nowStartUtc - anchorStartUtc) / 86400000 / 7));
     return addDays(anchorStart, Math.floor(weeksDiff / every) * every * 7);
   }
   if (cadence === "month") {
@@ -174,6 +190,38 @@ function previousDailyPeriodStart(task: Task, currentStart: Date) {
     return addYears(currentStart, -every);
   }
   return currentStart;
+}
+
+function preserveDailyCompletionStateOnScheduleChange(
+  task: Task,
+  nextCadence: Task["repeat_cadence"] | null | undefined,
+  nextRepeatEvery: number | undefined
+) {
+  if (task.task_type !== "daily" || !task.last_completion_period) {
+    return;
+  }
+
+  const currentPeriod = periodStartForDaily(task);
+  const wasComplete = task.last_completion_period === localDateKey(currentPeriod);
+  const targetCadence = nextCadence ?? task.repeat_cadence ?? "day";
+  const targetEvery = Math.max(1, nextRepeatEvery ?? task.repeat_every ?? 1);
+  const nextTaskShape = { ...task, repeat_cadence: targetCadence, repeat_every: targetEvery };
+  const nextCurrentPeriod = periodStartForDaily(nextTaskShape);
+
+  if (wasComplete) {
+    task.last_completion_period = localDateKey(nextCurrentPeriod);
+    return;
+  }
+
+  const derivedPeriod = periodStartForDaily(nextTaskShape, dateFromKey(task.last_completion_period));
+  const derivedKey = localDateKey(derivedPeriod);
+  const nextCurrentKey = localDateKey(nextCurrentPeriod);
+  if (derivedKey === nextCurrentKey) {
+    task.last_completion_period = localDateKey(previousDailyPeriodStart(nextTaskShape, nextCurrentPeriod));
+    return;
+  }
+
+  task.last_completion_period = derivedKey;
 }
 
 function habitResetPeriodStart(task: Task, targetDate = new Date()) {
@@ -597,6 +645,13 @@ const indexeddbRepository: TaskwebRepositories = {
       }
 
       if (task.task_type === "daily") {
+        if ("repeat_cadence" in input || ("repeat_every" in input && input.repeat_every !== undefined)) {
+          preserveDailyCompletionStateOnScheduleChange(
+            task,
+            input.repeat_cadence,
+            input.repeat_every
+          );
+        }
         if ("repeat_cadence" in input) {
           task.repeat_cadence = input.repeat_cadence ?? null;
         }

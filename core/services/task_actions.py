@@ -102,7 +102,15 @@ def refresh_profile_period_state(*, profile: Profile, user, timestamp: datetime 
             cadence=daily.repeat_cadence or Task.Cadence.DAY,
             repeat_every=daily.repeat_every,
         )
-        if daily.last_completion_period < expected_prev and daily.current_streak != 0:
+        # Keep the streak intact while the immediately previous period can still be
+        # recovered through the "new day" backfill modal. Only reset once the task
+        # has fallen more than one period behind.
+        recoverable_prev = previous_daily_period_start(
+            current_period_start=expected_prev,
+            cadence=daily.repeat_cadence or Task.Cadence.DAY,
+            repeat_every=daily.repeat_every,
+        )
+        if daily.last_completion_period < recoverable_prev and daily.current_streak != 0:
             daily.current_streak = 0
             daily.full_clean()
             daily.save(update_fields=["current_streak", "updated_at"])

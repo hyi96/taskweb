@@ -7,7 +7,14 @@ import { useProfileContext } from "../profiles/ProfileContext";
 
 type TimeResolution = "hour" | "day" | "week" | "month" | "year";
 type TargetType = "gold" | "habit" | "daily" | "todo" | "reward" | "activity";
-type TargetValueKey = "gold_delta" | "user_gold" | "count_delta" | "time_spent" | "completions" | "created" | "completed" | "claims";
+type TargetValueKey =
+  | "gold_delta"
+  | "user_gold"
+  | "count_delta"
+  | "time_spent"
+  | "completions"
+  | "created_completed"
+  | "claims";
 
 type TargetInstance = { id: string | null; name: string; activityTitle?: string };
 type SearchOption = { targetType: TargetType; entityId: string | null; activityTitle?: string; name: string };
@@ -44,8 +51,7 @@ const TARGET_VALUE_OPTIONS: Record<TargetType, Array<{ value: TargetValueKey; la
     { value: "time_spent", label: "Total Time Spent (minutes)" }
   ],
   todo: [
-    { value: "created", label: "Created" },
-    { value: "completed", label: "Completed" },
+    { value: "created_completed", label: "Created / Completed" },
     { value: "time_spent", label: "Total Time Spent (minutes)" }
   ],
   reward: [
@@ -78,7 +84,7 @@ export function createBuckets(resolution: TimeResolution): Bucket[] {
   }
   if (resolution === "day") {
     const currentDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    for (let i = 13; i >= 0; i -= 1) {
+    for (let i = 15; i >= 0; i -= 1) {
       const start = new Date(currentDay);
       start.setDate(start.getDate() - i);
       const end = new Date(start);
@@ -89,7 +95,7 @@ export function createBuckets(resolution: TimeResolution): Bucket[] {
   }
   if (resolution === "week") {
     const currentWeek = startOfWeekMonday(now);
-    for (let i = 7; i >= 0; i -= 1) {
+    for (let i = 11; i >= 0; i -= 1) {
       const start = new Date(currentWeek);
       start.setDate(start.getDate() - i * 7);
       const end = new Date(start);
@@ -108,7 +114,7 @@ export function createBuckets(resolution: TimeResolution): Bucket[] {
     return buckets;
   }
   const currentYear = new Date(now.getFullYear(), 0, 1);
-  for (let i = 3; i >= 0; i -= 1) {
+  for (let i = 7; i >= 0; i -= 1) {
     const start = new Date(currentYear.getFullYear() - i, 0, 1);
     const end = new Date(start.getFullYear() + 1, 0, 1);
     buckets.push({ start, end, label: String(start.getFullYear()) });
@@ -209,12 +215,15 @@ export function aggregateValues(
     return values;
   }
 
-  if (targetType === "todo" && (targetValue === "created" || targetValue === "completed") && instance?.id) {
+  if (targetType === "todo" && targetValue === "created_completed" && instance?.id) {
     const task = tasks.find((t) => t.id === instance.id);
-    const keyDate = targetValue === "created" ? task?.created_at : task?.completed_at;
-    if (keyDate) {
-      const idx = bucketIndexFor(new Date(keyDate), buckets);
-      if (idx >= 0) values[idx] = 1;
+    if (task?.created_at) {
+      const createdIdx = bucketIndexFor(new Date(task.created_at), buckets);
+      if (createdIdx >= 0) values[createdIdx] += 1;
+    }
+    if (task?.completed_at) {
+      const completedIdx = bucketIndexFor(new Date(task.completed_at), buckets);
+      if (completedIdx >= 0) values[completedIdx] += 1;
     }
     return values;
   }

@@ -2,6 +2,7 @@ from django.utils import timezone
 from rest_framework import serializers
 
 from core.models import ChecklistItem, LogEntry, Profile, StreakBonusRule, Tag, Task
+from core.services.periods import daily_period_start, previous_daily_period_start
 
 
 class ProfileSerializer(serializers.ModelSerializer):
@@ -179,6 +180,66 @@ class TaskSerializer(serializers.ModelSerializer):
         ]
 
 
+def _preserve_daily_completion_state_on_schedule_change(
+    task: Task,
+    *,
+    next_cadence: str | None,
+    next_repeat_every: int | None,
+) -> None:
+    """Keep current-period completion stable when daily cadence settings change.
+
+    Taskweb stores only the completion *period* bucket, not the original completion
+    timestamp. Changing cadence/repeat_every can therefore accidentally flip a daily
+    from complete->incomplete or incomplete->complete for the current period unless
+    we rewrite the stored bucket intentionally.
+    """
+
+    if task.task_type != Task.TaskType.DAILY or task.last_completion_period is None:
+        return
+
+    current_cadence = task.repeat_cadence or Task.Cadence.DAY
+    current_every = max(1, int(task.repeat_every or 1))
+    target_cadence = next_cadence or current_cadence
+    target_every = max(1, int(next_repeat_every or current_every))
+    anchor_date = timezone.localtime(task.created_at).date()
+    today = timezone.localdate()
+
+    current_period = daily_period_start(
+        target_date=today,
+        cadence=current_cadence,
+        repeat_every=current_every,
+        anchor_date=anchor_date,
+    )
+    was_complete = task.last_completion_period == current_period
+
+    next_current_period = daily_period_start(
+        target_date=today,
+        cadence=target_cadence,
+        repeat_every=target_every,
+        anchor_date=anchor_date,
+    )
+
+    if was_complete:
+        task.last_completion_period = next_current_period
+        return
+
+    derived_period = daily_period_start(
+        target_date=task.last_completion_period,
+        cadence=target_cadence,
+        repeat_every=target_every,
+        anchor_date=anchor_date,
+    )
+    if derived_period == next_current_period:
+        task.last_completion_period = previous_daily_period_start(
+            current_period_start=next_current_period,
+            cadence=target_cadence,
+            repeat_every=target_every,
+        )
+        return
+
+    task.last_completion_period = derived_period
+
+
 class TaskCreateUpdateSerializer(serializers.ModelSerializer):
     profile_id = serializers.UUIDField(write_only=True, required=False)
     tag_ids = serializers.PrimaryKeyRelatedField(
@@ -262,6 +323,14 @@ class TaskCreateUpdateSerializer(serializers.ModelSerializer):
     def update(self, instance, validated_data):
         tags = validated_data.pop("tags", None)
         validated_data.pop("profile_id", None)
+        if instance.task_type == Task.TaskType.DAILY and (
+            "repeat_cadence" in validated_data or "repeat_every" in validated_data
+        ):
+            _preserve_daily_completion_state_on_schedule_change(
+                instance,
+                next_cadence=validated_data.get("repeat_cadence", instance.repeat_cadence),
+                next_repeat_every=validated_data.get("repeat_every", instance.repeat_every),
+            )
         for field, value in validated_data.items():
             setattr(instance, field, value)
         instance.full_clean()

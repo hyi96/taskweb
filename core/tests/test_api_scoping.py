@@ -1,4 +1,6 @@
+from datetime import date
 from decimal import Decimal
+from unittest.mock import patch
 from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.urls import reverse
@@ -183,3 +185,47 @@ class TestApiScoping(TestCase):
         preview = self.client.get(reverse("new-day-list"), {"profile_id": str(self.profile.id)})
         self.assertEqual(preview.status_code, 200)
         self.assertEqual(preview.data["dailies"], [])
+
+    def test_updating_daily_cadence_preserves_current_completion(self):
+        self.client.force_authenticate(user=self.user)
+        fixed_today = date(2026, 3, 18)
+        Task.objects.filter(id=self.daily.id).update(
+            created_at=timezone.make_aware(timezone.datetime(2026, 3, 1, 9, 0, 0)),
+            last_completion_period=fixed_today,
+            current_streak=4,
+            best_streak=4,
+        )
+
+        with patch("core.api.serializers.timezone.localdate", return_value=fixed_today):
+            response = self.client.patch(
+                reverse("task-detail", kwargs={"pk": self.daily.id}),
+                {"profile_id": str(self.profile.id), "repeat_cadence": Task.Cadence.WEEK},
+                format="json",
+            )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["last_completion_period"], "2026-03-16")
+        self.daily.refresh_from_db()
+        self.assertEqual(self.daily.last_completion_period.isoformat(), "2026-03-16")
+
+    def test_updating_daily_cadence_preserves_incomplete_state(self):
+        self.client.force_authenticate(user=self.user)
+        fixed_today = date(2026, 3, 18)
+        Task.objects.filter(id=self.daily.id).update(
+            created_at=timezone.make_aware(timezone.datetime(2026, 3, 1, 9, 0, 0)),
+            last_completion_period=date(2026, 3, 16),
+            current_streak=4,
+            best_streak=4,
+        )
+
+        with patch("core.api.serializers.timezone.localdate", return_value=fixed_today):
+            response = self.client.patch(
+                reverse("task-detail", kwargs={"pk": self.daily.id}),
+                {"profile_id": str(self.profile.id), "repeat_cadence": Task.Cadence.WEEK},
+                format="json",
+            )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["last_completion_period"], "2026-03-09")
+        self.daily.refresh_from_db()
+        self.assertEqual(self.daily.last_completion_period.isoformat(), "2026-03-09")
