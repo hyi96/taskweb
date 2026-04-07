@@ -8,6 +8,7 @@ import {
   importProfileTaskApp,
   migrateLocalProfile,
   storageMode,
+  updateProfile,
   type LocalToCloudMigrationReport,
   type TaskAppImportResult
 } from "../../shared/repositories/client";
@@ -57,6 +58,15 @@ export function ProfilesPage() {
       void queryClient.invalidateQueries({ queryKey: ["profiles"] });
       void queryClient.invalidateQueries({ queryKey: ["tasks"] });
       void queryClient.invalidateQueries({ queryKey: ["logs"] });
+    }
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: ({ id, input }: { id: string; input: { is_vacation_mode?: boolean } }) => updateProfile(id, input),
+    onSuccess: async () => {
+      setError("");
+      await queryClient.invalidateQueries({ queryKey: ["profiles"] });
+      await queryClient.invalidateQueries({ queryKey: ["new-day"] });
     }
   });
 
@@ -221,10 +231,24 @@ export function ProfilesPage() {
               <div className="profile-title-row">
                 <strong>{profile.name}</strong>
                 {profileId === profile.id ? <span className="completion-badge">active</span> : null}
+                {profile.is_vacation_mode ? <span className="completion-badge">vacation</span> : null}
               </div>
               <span className="task-meta">Balance: {profile.gold_balance}</span>
             </div>
             <div className="tag-actions">
+              <button
+                type="button"
+                className="ghost-button"
+                disabled={busyProfileId === profile.id || updateMutation.isPending}
+                onClick={() =>
+                  updateMutation.mutate({
+                    id: profile.id,
+                    input: { is_vacation_mode: !profile.is_vacation_mode }
+                  })
+                }
+              >
+                {profile.is_vacation_mode ? "Vacation off" : "Vacation on"}
+              </button>
               {isCloudMode && (
                 <>
                   <input

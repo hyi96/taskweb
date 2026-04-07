@@ -74,6 +74,7 @@ type SortLabel = (typeof HABIT_SORTS | typeof DAILY_SORTS | typeof TODO_SORTS | 
 
 const SORTS_STORAGE_KEY_PREFIX = "taskweb.task_sorts";
 const FILTERS_STORAGE_KEY_PREFIX = "taskweb.task_filters";
+const LAST_ACTIVE_DAY_STORAGE_KEY_PREFIX = "taskweb.last_active_day";
 
 type EditorPayload = {
   profile_id?: string;
@@ -235,6 +236,28 @@ function storeFilterModes(
 
 function newDaySeenStorageKey(profileId: string, day: string) {
   return `taskweb.new_day_seen.${profileId}.${day}`;
+}
+
+function taskLastActiveDayStorageKey(profileId: string) {
+  return `${LAST_ACTIVE_DAY_STORAGE_KEY_PREFIX}.${profileId}`;
+}
+
+function loadStoredLastActiveDay(profileId: string) {
+  if (typeof window === "undefined" || !profileId) {
+    return null;
+  }
+  const value = window.localStorage.getItem(taskLastActiveDayStorageKey(profileId));
+  if (!value || !/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    return null;
+  }
+  return value;
+}
+
+function storeLastActiveDay(profileId: string, day: string) {
+  if (typeof window === "undefined" || !profileId) {
+    return;
+  }
+  window.localStorage.setItem(taskLastActiveDayStorageKey(profileId), day);
 }
 
 function hasSeenNewDayModalToday(profileId: string) {
@@ -537,7 +560,7 @@ function TaskColumnHeader({
 }
 
 export function TaskBoardPage() {
-  const { profileId } = useProfileContext();
+  const { profileId, activeProfile } = useProfileContext();
   const { setCurrentActivity } = useCurrentActivity();
   const queryClient = useQueryClient();
   const tasksKey = ["tasks", profileId] as const;
@@ -563,9 +586,14 @@ export function TaskBoardPage() {
   const [editorState, setEditorState] = useState<EditorState | null>(null);
   const [showNewDayModal, setShowNewDayModal] = useState(false);
   const [checkedNewDayIds, setCheckedNewDayIds] = useState<string[]>([]);
+  const [protectedNewDayIds, setProtectedNewDayIds] = useState<string[]>([]);
   const checkedNewDayIdsRef = useRef<string[]>([]);
+  const protectedNewDayIdsRef = useRef<string[]>([]);
+  const [lastActiveDayForPreview, setLastActiveDayForPreview] = useState<string | null>(null);
+  const lastActiveStampRef = useRef<string | null>(null);
   const sortsHydratedRef = useRef(false);
   const filtersHydratedRef = useRef(false);
+  const shouldCheckNewDay = Boolean(profileId && lastActiveDayForPreview && lastActiveDayForPreview < currentLocalDay);
 
   const tasksQuery = useQuery({
     queryKey: tasksKey,
@@ -578,9 +606,9 @@ export function TaskBoardPage() {
     enabled: Boolean(profileId)
   });
   const newDayQuery = useQuery({
-    queryKey: ["new-day", profileId, currentLocalDay],
-    queryFn: () => fetchNewDayPreview(profileId),
-    enabled: Boolean(profileId)
+    queryKey: ["new-day", profileId, currentLocalDay, lastActiveDayForPreview],
+    queryFn: () => fetchNewDayPreview(profileId, lastActiveDayForPreview),
+    enabled: shouldCheckNewDay
   });
 
   const updateTaskInCache = (updatedTask: Task) => {
@@ -651,11 +679,13 @@ export function TaskBoardPage() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: tasksKey })
   });
   const startNewDayMutation = useMutation({
-    mutationFn: ({ ids }: { ids: string[] }) => startNewDay(profileId, ids),
+    mutationFn: ({ checkedIds, protectedIds }: { checkedIds: string[]; protectedIds: string[] }) =>
+      startNewDay(profileId, checkedIds, protectedIds),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: tasksKey });
       await queryClient.invalidateQueries({ queryKey: ["logs", profileId] });
       await queryClient.invalidateQueries({ queryKey: ["new-day", profileId] });
+      await queryClient.invalidateQueries({ queryKey: ["profiles"] });
     }
   });
 
@@ -664,6 +694,10 @@ export function TaskBoardPage() {
   useEffect(() => {
     checkedNewDayIdsRef.current = checkedNewDayIds;
   }, [checkedNewDayIds]);
+
+  useEffect(() => {
+    protectedNewDayIdsRef.current = protectedNewDayIds;
+  }, [protectedNewDayIds]);
 
   useEffect(() => {
     const syncLocalDay = () => {
@@ -697,10 +731,46 @@ export function TaskBoardPage() {
   useEffect(() => {
     setShowNewDayModal(false);
     setCheckedNewDayIds([]);
+    setProtectedNewDayIds([]);
     checkedNewDayIdsRef.current = [];
+    protectedNewDayIdsRef.current = [];
+    lastActiveStampRef.current = null;
     sortsHydratedRef.current = false;
     filtersHydratedRef.current = false;
   }, [profileId]);
+
+  useEffect(() => {
+    if (!profileId) {
+      setLastActiveDayForPreview(null);
+      return;
+    }
+    const stored = loadStoredLastActiveDay(profileId);
+    if (!stored) {
+      storeLastActiveDay(profileId, currentLocalDay);
+      setLastActiveDayForPreview(null);
+      return;
+    }
+    if (stored >= currentLocalDay) {
+      if (stored !== currentLocalDay) {
+        storeLastActiveDay(profileId, currentLocalDay);
+      }
+      setLastActiveDayForPreview(null);
+      return;
+    }
+    setLastActiveDayForPreview(stored);
+  }, [profileId, currentLocalDay]);
+
+  useEffect(() => {
+    if (!profileId || !shouldCheckNewDay || !newDayQuery.isSuccess) {
+      return;
+    }
+    const stampKey = `${profileId}:${currentLocalDay}:${lastActiveDayForPreview ?? ""}`;
+    if (lastActiveStampRef.current === stampKey) {
+      return;
+    }
+    storeLastActiveDay(profileId, currentLocalDay);
+    lastActiveStampRef.current = stampKey;
+  }, [profileId, currentLocalDay, lastActiveDayForPreview, shouldCheckNewDay, newDayQuery.isSuccess]);
 
   useEffect(() => {
     const stored = loadStoredSortModes(profileId);
@@ -759,7 +829,9 @@ export function TaskBoardPage() {
     }
     setShowNewDayModal(true);
     setCheckedNewDayIds([]);
+    setProtectedNewDayIds([]);
     checkedNewDayIdsRef.current = [];
+    protectedNewDayIdsRef.current = [];
     markNewDayModalSeenToday(profileId);
   }, [newDayItems, profileId, currentLocalDay]);
 
@@ -1017,12 +1089,42 @@ export function TaskBoardPage() {
 
   const closeNewDayModal = () => {
     setShowNewDayModal(false);
+    setCheckedNewDayIds([]);
+    setProtectedNewDayIds([]);
+    checkedNewDayIdsRef.current = [];
+    protectedNewDayIdsRef.current = [];
     markNewDayModalSeenToday(profileId);
+  };
+
+  const dismissNewDayModal = () => {
+    const shouldFinalize = newDayItems.length > 0 && !startNewDayMutation.isPending;
+    closeNewDayModal();
+    if (shouldFinalize) {
+      void startNewDayMutation.mutateAsync({ checkedIds: [], protectedIds: [] });
+    }
   };
 
   const toggleNewDayItem = (itemId: string) => {
     setCheckedNewDayIds((current) => {
       const next = current.includes(itemId) ? current.filter((id) => id !== itemId) : [...current, itemId];
+      checkedNewDayIdsRef.current = next;
+      return next;
+    });
+    setProtectedNewDayIds((current) => {
+      const next = current.filter((id) => id !== itemId);
+      protectedNewDayIdsRef.current = next;
+      return next;
+    });
+  };
+
+  const toggleNewDayProtection = (itemId: string) => {
+    setProtectedNewDayIds((current) => {
+      const next = current.includes(itemId) ? current.filter((id) => id !== itemId) : [...current, itemId];
+      protectedNewDayIdsRef.current = next;
+      return next;
+    });
+    setCheckedNewDayIds((current) => {
+      const next = current.filter((id) => id !== itemId);
       checkedNewDayIdsRef.current = next;
       return next;
     });
@@ -1032,11 +1134,23 @@ export function TaskBoardPage() {
     const next = newDayItems.map((item) => item.id);
     checkedNewDayIdsRef.current = next;
     setCheckedNewDayIds(next);
+    protectedNewDayIdsRef.current = [];
+    setProtectedNewDayIds([]);
+  };
+
+  const protectAllNewDayItems = () => {
+    const next = newDayItems.filter((item) => item.can_protect).map((item) => item.id);
+    protectedNewDayIdsRef.current = next;
+    setProtectedNewDayIds(next);
+    checkedNewDayIdsRef.current = [];
+    setCheckedNewDayIds([]);
   };
 
   const uncheckAllNewDayItems = () => {
     checkedNewDayIdsRef.current = [];
     setCheckedNewDayIds([]);
+    protectedNewDayIdsRef.current = [];
+    setProtectedNewDayIds([]);
   };
 
   const formatPreviousPeriod = (item: NewDayPreviewItem) => {
@@ -1045,14 +1159,27 @@ export function TaskBoardPage() {
   };
 
   const handleStartNewDay = async () => {
-    const ids = [...checkedNewDayIdsRef.current];
-    await startNewDayMutation.mutateAsync({ ids });
+    const checkedIds = [...checkedNewDayIdsRef.current];
+    const protectedIds = [...protectedNewDayIdsRef.current];
+    await startNewDayMutation.mutateAsync({ checkedIds, protectedIds });
     setShowNewDayModal(false);
     setCheckedNewDayIds([]);
+    setProtectedNewDayIds([]);
     checkedNewDayIdsRef.current = [];
+    protectedNewDayIdsRef.current = [];
     markNewDayModalSeenToday(profileId);
     closeNewDayModal();
   };
+
+  const projectedGoldEarned = newDayItems
+    .filter((item) => checkedNewDayIds.includes(item.id))
+    .reduce((sum, item) => sum + Number(item.completion_gold_delta), 0);
+  const totalProtectionCost = newDayItems
+    .filter((item) => protectedNewDayIds.includes(item.id))
+    .reduce((sum, item) => sum + Number(item.protection_cost), 0);
+  const currentGold = Number(activeProfile?.gold_balance ?? 0);
+  const canAffordProtections = currentGold + projectedGoldEarned >= totalProtectionCost;
+  const expectedCost = Math.max(0, totalProtectionCost - projectedGoldEarned);
 
   return (
     <div className="board-layout">
@@ -1089,35 +1216,74 @@ export function TaskBoardPage() {
       {startNewDayMutation.error && <div className="status error">{extractErrorMessage(startNewDayMutation.error)}</div>}
 
       {showNewDayModal && (
-        <div className="modal-backdrop" onClick={closeNewDayModal}>
+        <div className="modal-backdrop" onClick={dismissNewDayModal}>
           <div className="modal-card" onClick={(event) => event.stopPropagation()}>
             <div className="modal-header">
               <h2>New Day</h2>
-              <button type="button" className="ghost-button" onClick={closeNewDayModal}>
+              <button type="button" className="ghost-button" onClick={dismissNewDayModal}>
                 Close
               </button>
             </div>
-            <p className="task-meta">You have unchecked dailies from the previous period. Check them off to maintain streaks.</p>
+            <p className="task-meta">
+              You have unchecked dailies from the previous period. Check them off to earn gold and maintain streaks, or
+              protect their streaks for a gold cost.
+            </p>
             <div className="modal-actions" style={{ justifyContent: "flex-start" }}>
               <button type="button" className="action-button" onClick={checkAllNewDayItems}>
                 Check all
               </button>
+              <button type="button" className="ghost-button" onClick={protectAllNewDayItems}>
+                Protect all
+              </button>
               <button type="button" className="ghost-button" onClick={uncheckAllNewDayItems}>
-                Uncheck all
+                Clear all
               </button>
             </div>
+            <div className="new-day-summary">
+              <span className="task-meta">Current gold: {currentGold.toFixed(2)}</span>
+              <span className="task-meta">Projected gold earned: +{projectedGoldEarned.toFixed(2)}</span>
+              <span className="task-meta">Protection cost: {totalProtectionCost.toFixed(2)}</span>
+              <span className="task-meta">Expected net cost: {expectedCost.toFixed(2)}</span>
+            </div>
+            {!canAffordProtections && (
+              <div className="status error">Not enough gold to cover the selected streak protections.</div>
+            )}
             <ul className="nested-list">
               {newDayItems.map((item) => (
                 <li key={item.id}>
-                  <label className="checkbox-row">
-                    <input
-                      type="checkbox"
-                      checked={checkedNewDayIds.includes(item.id)}
-                      onChange={() => toggleNewDayItem(item.id)}
-                    />
-                    <span>{item.title}</span>
-                  </label>
-                  <span className="task-meta">Previous period: {formatPreviousPeriod(item)}</span>
+                  <div className="new-day-item">
+                    <div className="new-day-item-copy">
+                      <strong>{item.title}</strong>
+                      <span className="task-meta">Previous period: {formatPreviousPeriod(item)}</span>
+                      <span className="task-meta">Check reward: +{Number(item.completion_gold_delta).toFixed(2)}</span>
+                      {item.can_protect ? (
+                        <span className="task-meta">
+                          Protect streak: {Number(item.protection_cost).toFixed(2)} ({item.missed_period_count} missed)
+                        </span>
+                      ) : (
+                        <span className="task-meta">Protect streak: unavailable without an existing streak.</span>
+                      )}
+                    </div>
+                    <div className="new-day-item-controls">
+                      <label className="checkbox-row">
+                        <input
+                          type="checkbox"
+                          checked={checkedNewDayIds.includes(item.id)}
+                          onChange={() => toggleNewDayItem(item.id)}
+                        />
+                        <span>Check</span>
+                      </label>
+                      <label className="checkbox-row">
+                        <input
+                          type="checkbox"
+                          checked={protectedNewDayIds.includes(item.id)}
+                          disabled={!item.can_protect}
+                          onChange={() => toggleNewDayProtection(item.id)}
+                        />
+                        <span>Protect</span>
+                      </label>
+                    </div>
+                  </div>
                 </li>
               ))}
             </ul>
@@ -1125,7 +1291,7 @@ export function TaskBoardPage() {
               <button
                 type="button"
                 className="action-button"
-                disabled={startNewDayMutation.isPending}
+                disabled={startNewDayMutation.isPending || !canAffordProtections}
                 onClick={() => void handleStartNewDay()}
               >
                 Start New Day

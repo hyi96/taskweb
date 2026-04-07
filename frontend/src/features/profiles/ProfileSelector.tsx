@@ -45,7 +45,12 @@ export function ProfileSelector({ compact = false }: ProfileSelectorProps) {
           </select>
         </>
       )}
-      {activeProfile && <small>Balance: {activeProfile.gold_balance}</small>}
+      {activeProfile && (
+        <small>
+          Balance: {activeProfile.gold_balance}
+          {activeProfile.is_vacation_mode ? " · Vacation mode on" : ""}
+        </small>
+      )}
       {isProfilesLoading && <small>Loading profiles...</small>}
     </div>
   );

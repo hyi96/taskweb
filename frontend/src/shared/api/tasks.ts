@@ -19,6 +19,7 @@ const taskSchema = z.object({
   current_streak: z.number(),
   best_streak: z.number(),
   streak_goal: z.number(),
+  streak_protection_cost: z.string(),
   last_completion_period: z.string().nullable(),
   autocomplete_time_threshold: z.string().nullable(),
   due_at: z.string().nullable(),
@@ -45,6 +46,7 @@ const createTaskSchema = z.object({
   gold_delta: z.string().optional(),
   repeat_cadence: z.string().optional(),
   repeat_every: z.number().optional(),
+  streak_protection_cost: z.string().optional(),
   is_repeatable: z.boolean().optional()
 });
 
@@ -59,6 +61,7 @@ const updateTaskSchema = z.object({
   repeat_cadence: z.string().nullable().optional(),
   repeat_every: z.number().optional(),
   streak_goal: z.number().optional(),
+  streak_protection_cost: z.string().optional(),
   autocomplete_time_threshold: z.string().nullable().optional(),
   due_at: z.string().nullable().optional(),
   is_repeatable: z.boolean().optional()

@@ -41,6 +41,9 @@ export function formatLogLine(log: {
   if (log.type === "habit_incremented") {
     return `${when} | ${log.title_snapshot || "(no title)"} | count +${log.count_delta ?? "0"} | gold ${formatGoldDelta(log.gold_delta)}`;
   }
+  if (log.type === "daily_streak_protected") {
+    return `${when} | Streak protected: ${log.title_snapshot || "(no title)"} | gold ${formatGoldDelta(log.gold_delta)}`;
+  }
   return `${when} | ${log.title_snapshot || "(no title)"} | gold ${formatGoldDelta(log.gold_delta)}`;
 }
 

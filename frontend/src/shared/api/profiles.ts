@@ -6,6 +6,7 @@ const profileSchema = z.object({
   id: z.string().uuid(),
   name: z.string(),
   gold_balance: z.string(),
+  is_vacation_mode: z.boolean(),
   created_at: z.string()
 });
 
@@ -20,6 +21,17 @@ export async function createProfile(name: string): Promise<Profile> {
   const payload = await apiRequest<unknown>("/api/profiles/", {
     method: "POST",
     body: { name }
+  });
+  return profileSchema.parse(payload);
+}
+
+export async function updateProfile(
+  profileId: string,
+  input: { name?: string; is_vacation_mode?: boolean }
+): Promise<Profile> {
+  const payload = await apiRequest<unknown>(`/api/profiles/${profileId}/`, {
+    method: "PATCH",
+    body: input
   });
   return profileSchema.parse(payload);
 }

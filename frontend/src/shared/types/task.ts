@@ -17,6 +17,7 @@ export type Task = {
   current_streak: number;
   best_streak: number;
   streak_goal: number;
+  streak_protection_cost: string;
   last_completion_period: string | null;
   autocomplete_time_threshold: string | null;
   due_at: string | null;

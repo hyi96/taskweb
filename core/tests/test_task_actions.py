@@ -239,6 +239,9 @@ class TestTaskActionsService(TestCase):
         self.assertEqual(len(preview), 1)
         self.assertEqual(preview[0]["id"], str(daily.id))
         self.assertEqual(preview[0]["previous_period_start"], "2026-02-20")
+        self.assertEqual(preview[0]["completion_gold_delta"], Decimal("1.00"))
+        self.assertEqual(preview[0]["protection_cost"], Decimal("1.00"))
+        self.assertTrue(preview[0]["can_protect"])
 
         result = start_new_day(
             profile=self.profile,
@@ -248,8 +251,125 @@ class TestTaskActionsService(TestCase):
         )
         self.assertEqual(result["updated_count"], 1)
         daily.refresh_from_db()
+        self.profile.refresh_from_db()
         self.assertEqual(daily.last_completion_period, date(2026, 2, 20))
         self.assertEqual(daily.current_streak, 4)
+        self.assertEqual(self.profile.gold_balance, Decimal("11.00"))
+        log = self._latest_log_for(self.profile)
+        self.assertEqual(log.type, LogEntry.LogType.DAILY_COMPLETED)
+        self.assertEqual(log.gold_delta, Decimal("1.00"))
+
+    def test_new_day_can_protect_multi_day_gap_without_resetting_streak(self):
+        daily = Task.objects.create(
+            profile=self.profile,
+            task_type=Task.TaskType.DAILY,
+            title="Protect me",
+            repeat_cadence=Task.Cadence.DAY,
+            repeat_every=1,
+            gold_delta=Decimal("2.00"),
+            current_streak=5,
+            best_streak=5,
+            streak_protection_cost=Decimal("1.50"),
+            last_completion_period=date(2026, 2, 18),
+        )
+        Task.objects.filter(id=daily.id).update(created_at=timezone.make_aware(timezone.datetime(2026, 2, 1, 8, 0, 0)))
+
+        preview = get_uncompleted_dailies_from_previous_period(
+            profile=self.profile,
+            user=self.user,
+            timestamp=timezone.make_aware(timezone.datetime(2026, 2, 21, 8, 0, 0)),
+        )
+        self.assertEqual(preview[0]["missed_period_count"], 2)
+        self.assertEqual(preview[0]["streak_protection_cost"], Decimal("1.50"))
+        self.assertEqual(preview[0]["protection_cost"], Decimal("3.00"))
+
+        result = start_new_day(
+            profile=self.profile,
+            user=self.user,
+            checked_daily_ids=[],
+            protected_daily_ids=[daily.id],
+            timestamp=timezone.make_aware(timezone.datetime(2026, 2, 21, 8, 0, 0)),
+        )
+
+        self.assertEqual(result["updated_count"], 0)
+        self.assertEqual(result["protected_count"], 1)
+        daily.refresh_from_db()
+        self.profile.refresh_from_db()
+        self.assertEqual(daily.last_completion_period, date(2026, 2, 20))
+        self.assertEqual(daily.current_streak, 5)
+        self.assertEqual(self.profile.gold_balance, Decimal("7.00"))
+        log = self._latest_log_for(self.profile)
+        self.assertEqual(log.type, LogEntry.LogType.DAILY_STREAK_PROTECTED)
+        self.assertEqual(log.gold_delta, Decimal("-3.00"))
+
+    def test_new_day_checked_gold_can_fund_selected_protection(self):
+        checked_daily = Task.objects.create(
+            profile=self.profile,
+            task_type=Task.TaskType.DAILY,
+            title="Checked daily",
+            repeat_cadence=Task.Cadence.DAY,
+            repeat_every=1,
+            gold_delta=Decimal("5.00"),
+            current_streak=1,
+            best_streak=1,
+            last_completion_period=date(2026, 2, 19),
+        )
+        protected_daily = Task.objects.create(
+            profile=self.profile,
+            task_type=Task.TaskType.DAILY,
+            title="Protected daily",
+            repeat_cadence=Task.Cadence.DAY,
+            repeat_every=1,
+            gold_delta=Decimal("1.00"),
+            current_streak=1,
+            best_streak=1,
+            streak_protection_cost=Decimal("3.00"),
+            last_completion_period=date(2026, 2, 19),
+        )
+        Task.objects.filter(id__in=[checked_daily.id, protected_daily.id]).update(
+            created_at=timezone.make_aware(timezone.datetime(2026, 2, 1, 8, 0, 0))
+        )
+        self.profile.gold_balance = Decimal("0.00")
+        self.profile.save(update_fields=["gold_balance"])
+
+        result = start_new_day(
+            profile=self.profile,
+            user=self.user,
+            checked_daily_ids=[checked_daily.id],
+            protected_daily_ids=[protected_daily.id],
+            timestamp=timezone.make_aware(timezone.datetime(2026, 2, 21, 8, 0, 0)),
+        )
+
+        self.assertEqual(result["updated_count"], 1)
+        self.assertEqual(result["protected_count"], 1)
+        self.profile.refresh_from_db()
+        self.assertEqual(self.profile.gold_balance, Decimal("2.00"))
+
+    def test_new_day_protection_rejects_if_gold_still_insufficient(self):
+        daily = Task.objects.create(
+            profile=self.profile,
+            task_type=Task.TaskType.DAILY,
+            title="Too expensive",
+            repeat_cadence=Task.Cadence.DAY,
+            repeat_every=1,
+            gold_delta=Decimal("1.00"),
+            current_streak=2,
+            best_streak=2,
+            streak_protection_cost=Decimal("8.00"),
+            last_completion_period=date(2026, 2, 19),
+        )
+        Task.objects.filter(id=daily.id).update(created_at=timezone.make_aware(timezone.datetime(2026, 2, 1, 8, 0, 0)))
+        self.profile.gold_balance = Decimal("0.00")
+        self.profile.save(update_fields=["gold_balance"])
+
+        with self.assertRaises(ValidationError):
+            start_new_day(
+                profile=self.profile,
+                user=self.user,
+                checked_daily_ids=[],
+                protected_daily_ids=[daily.id],
+                timestamp=timezone.make_aware(timezone.datetime(2026, 2, 21, 8, 0, 0)),
+            )
 
     def test_new_day_preview_skips_task_already_completed_for_current_period(self):
         daily = Task.objects.create(

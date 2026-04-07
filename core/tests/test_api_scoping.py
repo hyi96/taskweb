@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, datetime
 from decimal import Decimal
 from unittest.mock import patch
 from django.contrib.auth import get_user_model
@@ -97,6 +97,18 @@ class TestApiScoping(TestCase):
         self.assertIn(str(self.profile.id), ids)
         self.assertNotIn(str(self.other_profile.id), ids)
 
+    def test_profile_patch_can_toggle_vacation_mode(self):
+        self.client.force_authenticate(user=self.user)
+        response = self.client.patch(
+            reverse("profile-detail", kwargs={"pk": self.profile.id}),
+            {"is_vacation_mode": True},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.data["is_vacation_mode"])
+        self.profile.refresh_from_db()
+        self.assertTrue(self.profile.is_vacation_mode)
+
     def test_tags_list_requires_valid_profile_id_for_non_empty(self):
         self.client.force_authenticate(user=self.user)
         response = self.client.get(reverse("tag-list"))
@@ -185,6 +197,104 @@ class TestApiScoping(TestCase):
         preview = self.client.get(reverse("new-day-list"), {"profile_id": str(self.profile.id)})
         self.assertEqual(preview.status_code, 200)
         self.assertEqual(preview.data["dailies"], [])
+
+    def test_new_day_preview_skips_weekly_daily_when_last_active_is_same_week(self):
+        self.client.force_authenticate(user=self.user)
+        fixed_now = timezone.make_aware(datetime(2026, 3, 19, 12, 0, 0))
+        Task.objects.filter(id=self.daily.id).update(
+            repeat_cadence=Task.Cadence.WEEK,
+            repeat_every=1,
+            created_at=timezone.make_aware(datetime(2026, 3, 1, 9, 0, 0)),
+            last_completion_period=date(2026, 3, 3),
+        )
+
+        with patch("core.services.task_actions.timezone.now", return_value=fixed_now):
+            preview = self.client.get(
+                reverse("new-day-list"),
+                {"profile_id": str(self.profile.id), "last_active_date": "2026-03-17"},
+            )
+
+        self.assertEqual(preview.status_code, 200)
+        self.assertEqual(preview.data["dailies"], [])
+
+    def test_new_day_preview_shows_weekly_daily_when_last_active_is_previous_week(self):
+        self.client.force_authenticate(user=self.user)
+        fixed_now = timezone.make_aware(datetime(2026, 3, 19, 12, 0, 0))
+        Task.objects.filter(id=self.daily.id).update(
+            repeat_cadence=Task.Cadence.WEEK,
+            repeat_every=1,
+            created_at=timezone.make_aware(datetime(2026, 3, 1, 9, 0, 0)),
+            last_completion_period=date(2026, 3, 3),
+        )
+
+        with patch("core.services.task_actions.timezone.now", return_value=fixed_now):
+            preview = self.client.get(
+                reverse("new-day-list"),
+                {"profile_id": str(self.profile.id), "last_active_date": "2026-03-08"},
+            )
+
+        self.assertEqual(preview.status_code, 200)
+        self.assertEqual(len(preview.data["dailies"]), 1)
+        self.assertEqual(preview.data["dailies"][0]["id"], str(self.daily.id))
+
+    def test_new_day_preview_vacation_mode_protects_streak_and_returns_empty(self):
+        self.client.force_authenticate(user=self.user)
+        fixed_now = timezone.make_aware(datetime(2026, 3, 19, 12, 0, 0))
+        Profile.objects.filter(id=self.profile.id).update(is_vacation_mode=True)
+        Task.objects.filter(id=self.daily.id).update(
+            repeat_cadence=Task.Cadence.DAY,
+            repeat_every=1,
+            created_at=timezone.make_aware(datetime(2026, 3, 1, 9, 0, 0)),
+            last_completion_period=date(2026, 3, 17),
+            current_streak=4,
+            best_streak=4,
+        )
+
+        with patch("core.services.task_actions.timezone.now", return_value=fixed_now):
+            preview = self.client.get(
+                reverse("new-day-list"),
+                {"profile_id": str(self.profile.id), "last_active_date": "2026-03-18"},
+            )
+
+        self.assertEqual(preview.status_code, 200)
+        self.assertEqual(preview.data["dailies"], [])
+        self.daily.refresh_from_db()
+        self.assertEqual(self.daily.current_streak, 4)
+        self.assertEqual(self.daily.last_completion_period.isoformat(), "2026-03-18")
+
+    def test_new_day_start_can_protect_selected_daily(self):
+        self.client.force_authenticate(user=self.user)
+        fixed_now = timezone.make_aware(datetime(2026, 3, 19, 12, 0, 0))
+        Profile.objects.filter(id=self.profile.id).update(gold_balance=Decimal("10.00"))
+        Task.objects.filter(id=self.daily.id).update(
+            created_at=timezone.make_aware(datetime(2026, 3, 1, 9, 0, 0)),
+            repeat_cadence=Task.Cadence.DAY,
+            repeat_every=1,
+            current_streak=3,
+            best_streak=3,
+            streak_protection_cost=Decimal("2.00"),
+            last_completion_period=date(2026, 3, 17),
+        )
+
+        with patch("core.services.task_actions.timezone.now", return_value=fixed_now):
+            response = self.client.post(
+                reverse("new-day-list"),
+                {
+                    "profile_id": str(self.profile.id),
+                    "checked_daily_ids": [],
+                    "protected_daily_ids": [str(self.daily.id)],
+                },
+                format="json",
+            )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["updated_count"], 0)
+        self.assertEqual(response.data["protected_count"], 1)
+        self.daily.refresh_from_db()
+        self.profile.refresh_from_db()
+        self.assertEqual(self.daily.current_streak, 3)
+        self.assertEqual(self.daily.last_completion_period.isoformat(), "2026-03-18")
+        self.assertEqual(self.profile.gold_balance, Decimal("8.00"))
 
     def test_updating_daily_cadence_preserves_current_completion(self):
         self.client.force_authenticate(user=self.user)

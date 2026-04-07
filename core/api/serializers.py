@@ -8,7 +8,7 @@ from core.services.periods import daily_period_start, previous_daily_period_star
 class ProfileSerializer(serializers.ModelSerializer):
     class Meta:
         model = Profile
-        fields = ["id", "name", "gold_balance", "created_at"]
+        fields = ["id", "name", "gold_balance", "is_vacation_mode", "created_at"]
         read_only_fields = ["id", "gold_balance", "created_at"]
 
 
@@ -168,6 +168,7 @@ class TaskSerializer(serializers.ModelSerializer):
             "current_streak",
             "best_streak",
             "streak_goal",
+            "streak_protection_cost",
             "last_completion_period",
             "autocomplete_time_threshold",
             "due_at",
@@ -265,6 +266,7 @@ class TaskCreateUpdateSerializer(serializers.ModelSerializer):
             "repeat_cadence",
             "repeat_every",
             "streak_goal",
+            "streak_protection_cost",
             "autocomplete_time_threshold",
             "due_at",
             "is_repeatable",
@@ -363,6 +365,12 @@ class NewDayPreviewItemSerializer(serializers.Serializer):
     last_completion_period = serializers.DateField(allow_null=True)
     repeat_cadence = serializers.CharField(allow_null=True)
     repeat_every = serializers.IntegerField()
+    current_streak = serializers.IntegerField()
+    missed_period_count = serializers.IntegerField()
+    completion_gold_delta = serializers.DecimalField(max_digits=12, decimal_places=2)
+    streak_protection_cost = serializers.DecimalField(max_digits=12, decimal_places=2)
+    protection_cost = serializers.DecimalField(max_digits=12, decimal_places=2)
+    can_protect = serializers.BooleanField()
 
 
 class NewDayPreviewSerializer(serializers.Serializer):
@@ -370,9 +378,19 @@ class NewDayPreviewSerializer(serializers.Serializer):
     dailies = NewDayPreviewItemSerializer(many=True)
 
 
+class NewDayPreviewQuerySerializer(serializers.Serializer):
+    last_active_date = serializers.DateField(required=False, allow_null=True)
+
+
 class NewDayStartSerializer(serializers.Serializer):
     profile_id = serializers.UUIDField()
     checked_daily_ids = serializers.ListField(
+        child=serializers.UUIDField(),
+        required=False,
+        default=list,
+        allow_empty=True,
+    )
+    protected_daily_ids = serializers.ListField(
         child=serializers.UUIDField(),
         required=False,
         default=list,

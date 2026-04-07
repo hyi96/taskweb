@@ -23,6 +23,10 @@ export async function createProfile(name: string) {
   return getRepositories().profiles.create(name);
 }
 
+export async function updateProfile(profileId: string, input: { name?: string; is_vacation_mode?: boolean }) {
+  return getRepositories().profiles.update(profileId, input);
+}
+
 export async function deleteProfile(profileId: string) {
   return getRepositories().profiles.delete(profileId);
 }
@@ -119,12 +123,12 @@ export function queueActivityDurationLog(input: ActivityDurationInput) {
   return getRepositories().activity.queueDurationLog(input);
 }
 
-export async function fetchNewDayPreview(profileId: string) {
-  return getRepositories().newDay.preview(profileId);
+export async function fetchNewDayPreview(profileId: string, lastActiveDate?: string | null) {
+  return getRepositories().newDay.preview(profileId, lastActiveDate);
 }
 
-export async function startNewDay(profileId: string, checkedDailyIds: string[]) {
-  return getRepositories().newDay.start(profileId, checkedDailyIds);
+export async function startNewDay(profileId: string, checkedDailyIds: string[], protectedDailyIds: string[] = []) {
+  return getRepositories().newDay.start(profileId, checkedDailyIds, protectedDailyIds);
 }
 
 export async function fetchLocalProfiles() {

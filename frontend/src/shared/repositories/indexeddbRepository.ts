@@ -192,6 +192,55 @@ function previousDailyPeriodStart(task: Task, currentStart: Date) {
   return currentStart;
 }
 
+function nextDailyStreakForCompletion(task: Task, completionStart: Date) {
+  const completionText = localDateKey(completionStart);
+  if (!task.last_completion_period) {
+    return 1;
+  }
+  const expectedPrev = localDateKey(previousDailyPeriodStart(task, completionStart));
+  return task.last_completion_period === expectedPrev ? task.current_streak + 1 : 1;
+}
+
+function dailyCompletionGoldDelta(task: Task, completionStart: Date, rules: StreakBonusRule[]) {
+  const nextStreak = nextDailyStreakForCompletion(task, completionStart);
+  const maxBonus = rules
+    .filter((rule) => rule.streak_goal <= nextStreak)
+    .reduce((max, rule) => Math.max(max, asNumber(rule.bonus_percent)), 0);
+  const base = asNumber(task.gold_delta);
+  return money(base * (1 + maxBonus / 100));
+}
+
+function missedPeriodCountForDaily(task: Task, previousStart: Date) {
+  if (task.current_streak <= 0 || !task.last_completion_period) {
+    return 0;
+  }
+  const previousText = localDateKey(previousStart);
+  if (task.last_completion_period >= previousText) {
+    return 0;
+  }
+  let missed = 0;
+  let period = previousStart;
+  while (localDateKey(period) > task.last_completion_period && missed < 365) {
+    missed += 1;
+    period = previousDailyPeriodStart(task, period);
+  }
+  return missed;
+}
+
+function streakProtectionUnitCost(task: Task) {
+  return Math.max(0, asNumber(task.streak_protection_cost ?? "1.00"));
+}
+
+function dailyProtectionCost(task: Task, previousStart: Date) {
+  return money(missedPeriodCountForDaily(task, previousStart) * streakProtectionUnitCost(task));
+}
+
+function endOfPreviousPeriodIso(currentStart: Date) {
+  const localMidnight = new Date(currentStart.getFullYear(), currentStart.getMonth(), currentStart.getDate(), 0, 0, 0, 0);
+  localMidnight.setMinutes(localMidnight.getMinutes() - 1);
+  return localMidnight.toISOString();
+}
+
 function preserveDailyCompletionStateOnScheduleChange(
   task: Task,
   nextCadence: Task["repeat_cadence"] | null | undefined,
@@ -305,6 +354,7 @@ async function ensureSeedProfile() {
     id: makeId(),
     name: "Default",
     gold_balance: "0.00",
+    is_vacation_mode: false,
     created_at: nowIso(),
   };
   await db.put("profiles", profile);
@@ -325,18 +375,20 @@ async function getProfileOrThrow(profileId: string) {
   return profile;
 }
 
-async function refreshProfilePeriodState(profileId: string) {
+async function refreshProfilePeriodState(profileId: string, options: { includeDailyStreaks?: boolean } = {}) {
   const db = await getDb();
   const tx = db.transaction("tasks", "readwrite");
   const tasks = await tx.store.index("by-profile").getAll(profileId);
   const now = new Date();
+  const includeDailyStreaks = options.includeDailyStreaks ?? true;
 
   for (const task of tasks) {
-    if (task.task_type === "daily" && task.last_completion_period) {
+    if (includeDailyStreaks && task.task_type === "daily" && task.last_completion_period) {
       const current = periodStartForDaily(task, now);
       const previous = previousDailyPeriodStart(task, current);
+      const recoverablePrevious = previousDailyPeriodStart(task, previous);
       const last = new Date(`${task.last_completion_period}T00:00:00`);
-      if (last < previous && task.current_streak !== 0) {
+      if (last < recoverablePrevious && task.current_streak !== 0) {
         task.current_streak = 0;
         task.updated_at = nowIso();
         await tx.store.put(task);
@@ -361,6 +413,42 @@ async function refreshProfilePeriodState(profileId: string) {
   await tx.done;
 }
 
+async function protectAllDailyStreaksForVacation(profileId: string, lastActiveDate: string) {
+  const db = await getDb();
+  const tx = db.transaction("tasks", "readwrite");
+  const tasks = await tx.store.index("by-profile").getAll(profileId);
+  const now = new Date();
+  const lastActive = dateFromKey(lastActiveDate);
+
+  for (const task of tasks) {
+    if (task.task_type !== "daily") {
+      continue;
+    }
+    const current = periodStartForDaily(task, now);
+    const lastActivePeriod = periodStartForDaily(task, lastActive);
+    if (localDateKey(current) === localDateKey(lastActivePeriod)) {
+      continue;
+    }
+    const previous = previousDailyPeriodStart(task, current);
+    const previousText = dateOnlyFromIso(previous.toISOString());
+    const createdText = dateOnlyFromIso(task.created_at);
+    if (createdText > previousText) {
+      continue;
+    }
+    if (!task.last_completion_period || task.current_streak <= 0) {
+      continue;
+    }
+    if (task.last_completion_period >= previousText) {
+      continue;
+    }
+    task.last_completion_period = previousText;
+    task.updated_at = nowIso();
+    await tx.store.put(task);
+  }
+
+  await tx.done;
+}
+
 function defaultTask(input: { profile_id: string; task_type: Task["task_type"]; title: string; notes?: string; gold_delta?: string }): Task {
   const now = nowIso();
   return {
@@ -380,6 +468,7 @@ function defaultTask(input: { profile_id: string; task_type: Task["task_type"]; 
     current_streak: 0,
     best_streak: 0,
     streak_goal: 0,
+    streak_protection_cost: "1.00",
     last_completion_period: null,
     autocomplete_time_threshold: null,
     due_at: null,
@@ -426,8 +515,25 @@ const indexeddbRepository: TaskwebRepositories = {
         id: makeId(),
         name,
         gold_balance: "0.00",
+        is_vacation_mode: false,
         created_at: nowIso(),
       };
+      await db.put("profiles", profile);
+      return profile;
+    },
+    async update(profileId, input) {
+      await ensureSeedProfile();
+      const db = await getDb();
+      const profile = await db.get("profiles", profileId);
+      if (!profile) {
+        throw new Error("Profile not found.");
+      }
+      if (typeof input.name === "string") {
+        profile.name = input.name.trim() || profile.name;
+      }
+      if (typeof input.is_vacation_mode === "boolean") {
+        profile.is_vacation_mode = input.is_vacation_mode;
+      }
       await db.put("profiles", profile);
       return profile;
     },
@@ -541,13 +647,18 @@ const indexeddbRepository: TaskwebRepositories = {
         throw new Error("Profile not found.");
       }
       profile.gold_balance = parsed.profile.gold_balance;
+      profile.is_vacation_mode = parsed.profile.is_vacation_mode ?? false;
       await tx.objectStore("profiles").put(profile);
 
       for (const tag of parsed.tags) {
         await tx.objectStore("tags").put({ ...tag, profile_id: profileId });
       }
       for (const task of parsed.tasks) {
-        await tx.objectStore("tasks").put({ ...task, profile_id: profileId });
+        await tx.objectStore("tasks").put({
+          ...task,
+          profile_id: profileId,
+          streak_protection_cost: task.streak_protection_cost ?? "1.00",
+        });
       }
       for (const item of parsed.checklist_items) {
         await tx.objectStore("checklist_items").put(item);
@@ -581,7 +692,7 @@ const indexeddbRepository: TaskwebRepositories = {
     async fetchAll(profileId) {
       assertProfileId(profileId);
       await ensureSeedProfile();
-      await refreshProfilePeriodState(profileId);
+      await refreshProfilePeriodState(profileId, { includeDailyStreaks: false });
       const db = await getDb();
       const tasks = await db.getAllFromIndex("tasks", "by-profile", profileId);
       return tasks.sort((a, b) => a.created_at.localeCompare(b.created_at)).map(cloneTask);
@@ -604,6 +715,7 @@ const indexeddbRepository: TaskwebRepositories = {
       if (input.task_type === "daily") {
         task.repeat_cadence = input.repeat_cadence ?? "day";
         task.repeat_every = Math.max(1, input.repeat_every ?? 1);
+        task.streak_protection_cost = money(Math.max(0, asNumber(input.streak_protection_cost ?? "1")));
       }
 
       task.updated_at = nowIso();
@@ -660,6 +772,9 @@ const indexeddbRepository: TaskwebRepositories = {
         }
         if ("streak_goal" in input && input.streak_goal !== undefined) {
           task.streak_goal = Math.max(0, input.streak_goal);
+        }
+        if ("streak_protection_cost" in input && input.streak_protection_cost !== undefined) {
+          task.streak_protection_cost = money(Math.max(0, asNumber(input.streak_protection_cost)));
         }
         if ("autocomplete_time_threshold" in input) {
           task.autocomplete_time_threshold = input.autocomplete_time_threshold ?? null;
@@ -1092,46 +1207,70 @@ const indexeddbRepository: TaskwebRepositories = {
   },
 
   newDay: {
-    async preview(profileId) {
+    async preview(profileId, lastActiveDate) {
       assertProfileId(profileId);
       await ensureSeedProfile();
-      await refreshProfilePeriodState(profileId);
+      const profile = await getProfileOrThrow(profileId);
+      if (profile.is_vacation_mode && lastActiveDate) {
+        await protectAllDailyStreaksForVacation(profileId, lastActiveDate);
+        await refreshProfilePeriodState(profileId);
+        return {
+          profile_id: profileId,
+          dailies: [],
+        } satisfies NewDayPreview;
+      }
       const db = await getDb();
-      const tasks = await db.getAllFromIndex("tasks", "by-profile", profileId);
+      const tx = db.transaction(["tasks", "streak_rules"], "readonly");
+      const tasks = await tx.objectStore("tasks").index("by-profile").getAll(profileId);
       const dailies = tasks
         .filter((task) => task.task_type === "daily")
         .sort((a, b) => a.title.localeCompare(b.title));
 
       const now = new Date();
-      const items = dailies
-        .map((daily) => {
+      const lastActive = lastActiveDate ? dateFromKey(lastActiveDate) : null;
+      if (!lastActive) {
+        return {
+          profile_id: profileId,
+          dailies: [],
+        } satisfies NewDayPreview;
+      }
+      const items = [];
+      for (const daily of dailies) {
           const current = periodStartForDaily(daily, now);
+          const lastActivePeriod = periodStartForDaily(daily, lastActive);
+          if (localDateKey(current) === localDateKey(lastActivePeriod)) {
+            continue;
+          }
           const previous = previousDailyPeriodStart(daily, current);
-          const currentText = dateOnlyFromIso(current.toISOString());
           const previousText = dateOnlyFromIso(previous.toISOString());
           const createdText = dateOnlyFromIso(daily.created_at);
           if (createdText > previousText) {
-            return null;
+            continue;
           }
-          if (currentText === previousText) {
-            return null;
+          if (daily.last_completion_period && daily.last_completion_period >= previousText) {
+            continue;
           }
-          if (daily.last_completion_period === currentText) {
-            return null;
-          }
-          if (daily.last_completion_period === previousText) {
-            return null;
-          }
-          return {
+          const rules = await tx.objectStore("streak_rules").index("by-task").getAll(daily.id);
+          const missedPeriodCount = missedPeriodCountForDaily(daily, previous);
+          items.push({
             id: daily.id,
             title: daily.title,
             previous_period_start: previousText,
             last_completion_period: daily.last_completion_period,
             repeat_cadence: daily.repeat_cadence,
             repeat_every: daily.repeat_every,
-          };
-        })
-        .filter((item): item is NonNullable<typeof item> => Boolean(item));
+            current_streak: daily.current_streak,
+            missed_period_count: missedPeriodCount,
+            completion_gold_delta: dailyCompletionGoldDelta(daily, previous, rules),
+            streak_protection_cost: money(streakProtectionUnitCost(daily)),
+            protection_cost: dailyProtectionCost(daily, previous),
+            can_protect: missedPeriodCount > 0 && daily.current_streak > 0 && Boolean(daily.last_completion_period),
+          });
+      }
+      await tx.done;
+      if (!items.length) {
+        await refreshProfilePeriodState(profileId);
+      }
 
       return {
         profile_id: profileId,
@@ -1139,19 +1278,28 @@ const indexeddbRepository: TaskwebRepositories = {
       } satisfies NewDayPreview;
     },
 
-    async start(profileId, checkedDailyIds) {
+    async start(profileId, checkedDailyIds, protectedDailyIds = []) {
       assertProfileId(profileId);
       await ensureSeedProfile();
       const db = await getDb();
-      const tx = db.transaction("tasks", "readwrite");
-      const tasks = await tx.store.index("by-profile").getAll(profileId);
+      const overlap = checkedDailyIds.filter((id) => protectedDailyIds.includes(id));
+      if (overlap.length) {
+        throw new Error("A daily cannot be checked and protected at the same time.");
+      }
+      const tx = db.transaction(["profiles", "tasks", "streak_rules", "logs"], "readwrite");
+      const tasks = await tx.objectStore("tasks").index("by-profile").getAll(profileId);
+      const profile = await tx.objectStore("profiles").get(profileId);
+      if (!profile) {
+        throw new Error("Profile not found.");
+      }
       const checkedSet = new Set(checkedDailyIds);
+      const protectedSet = new Set(protectedDailyIds);
       const now = new Date();
       let updated = 0;
+      let protectedCount = 0;
 
       for (const daily of tasks.filter((task) => task.task_type === "daily" && checkedSet.has(task.id))) {
         const current = periodStartForDaily(daily, now);
-        const currentText = dateOnlyFromIso(current.toISOString());
         const previous = previousDailyPeriodStart(daily, current);
         const previousText = dateOnlyFromIso(previous.toISOString());
         const createdText = dateOnlyFromIso(daily.created_at);
@@ -1160,27 +1308,78 @@ const indexeddbRepository: TaskwebRepositories = {
           continue;
         }
 
-        if (daily.last_completion_period === currentText || daily.last_completion_period === previousText) {
+        if (daily.last_completion_period === localDateKey(current) || daily.last_completion_period === previousText) {
           continue;
         }
-
-        const expectedPrev = dateOnlyFromIso(previousDailyPeriodStart(daily, previous).toISOString());
-        if (daily.last_completion_period && daily.last_completion_period === expectedPrev) {
-          daily.current_streak += 1;
-        } else {
-          daily.current_streak = 1;
-        }
-
+        const rules = await tx.objectStore("streak_rules").index("by-task").getAll(daily.id);
+        const nextStreak = nextDailyStreakForCompletion(daily, previous);
+        const completionGold = asNumber(dailyCompletionGoldDelta(daily, previous, rules));
+        daily.current_streak = nextStreak;
         daily.best_streak = Math.max(daily.best_streak, daily.current_streak);
         daily.last_completion_period = previousText;
+        daily.last_action_at = endOfPreviousPeriodIso(current);
+        daily.total_actions_count += 1;
         daily.updated_at = nowIso();
-        await tx.store.put(daily);
+        profile.gold_balance = money(asNumber(profile.gold_balance) + completionGold);
+        await tx.objectStore("tasks").put(daily);
+        await tx.objectStore("logs").put({
+          id: makeId(),
+          profile_id: profileId,
+          timestamp: daily.last_action_at,
+          created_at: nowIso(),
+          type: "daily_completed",
+          task_id: daily.id,
+          reward_id: null,
+          gold_delta: money(completionGold),
+          user_gold: profile.gold_balance,
+          count_delta: null,
+          duration: null,
+          title_snapshot: daily.title,
+        });
         updated += 1;
       }
 
+      for (const daily of tasks.filter((task) => task.task_type === "daily" && protectedSet.has(task.id))) {
+        const current = periodStartForDaily(daily, now);
+        const previous = previousDailyPeriodStart(daily, current);
+        const previousText = dateOnlyFromIso(previous.toISOString());
+        const createdText = dateOnlyFromIso(daily.created_at);
+        if (createdText > previousText) {
+          continue;
+        }
+        const missedPeriods = missedPeriodCountForDaily(daily, previous);
+        if (missedPeriods <= 0) {
+          continue;
+        }
+        const cost = asNumber(dailyProtectionCost(daily, previous));
+        if (asNumber(profile.gold_balance) < cost) {
+          throw new Error("Insufficient gold to protect selected streaks.");
+        }
+        profile.gold_balance = money(asNumber(profile.gold_balance) - cost);
+        daily.last_completion_period = previousText;
+        daily.updated_at = nowIso();
+        await tx.objectStore("tasks").put(daily);
+        await tx.objectStore("logs").put({
+          id: makeId(),
+          profile_id: profileId,
+          timestamp: endOfPreviousPeriodIso(current),
+          created_at: nowIso(),
+          type: "daily_streak_protected",
+          task_id: daily.id,
+          reward_id: null,
+          gold_delta: money(-cost),
+          user_gold: profile.gold_balance,
+          count_delta: null,
+          duration: null,
+          title_snapshot: daily.title,
+        });
+        protectedCount += 1;
+      }
+
+      await tx.objectStore("profiles").put(profile);
       await tx.done;
       await refreshProfilePeriodState(profileId);
-      return { updated_count: updated };
+      return { updated_count: updated, protected_count: protectedCount };
     },
   },
 };

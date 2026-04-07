@@ -10,11 +10,15 @@ const fetchNewDayPreviewMock = vi.fn();
 const startNewDayMock = vi.fn();
 const habitIncrementMock = vi.fn();
 const updateTaskMock = vi.fn();
+const activeProfileGoldMock = { value: "10.00" };
 
 const setCurrentActivityMock = vi.fn();
 
 vi.mock("../../../features/profiles/ProfileContext", () => ({
-  useProfileContext: () => ({ profileId: "11111111-1111-1111-1111-111111111111" })
+  useProfileContext: () => ({
+    profileId: "11111111-1111-1111-1111-111111111111",
+    activeProfile: { id: "11111111-1111-1111-1111-111111111111", gold_balance: activeProfileGoldMock.value }
+  })
 }));
 
 vi.mock("../../../features/activity/CurrentActivityContext", () => ({
@@ -57,6 +61,7 @@ function makeTask(partial: Partial<Task> & Pick<Task, "id" | "task_type" | "titl
     current_streak: 0,
     best_streak: 0,
     streak_goal: 0,
+    streak_protection_cost: "1.00",
     last_completion_period: null,
     autocomplete_time_threshold: null,
     due_at: null,
@@ -92,14 +97,57 @@ afterEach(() => {
 });
 
 beforeEach(() => {
+  activeProfileGoldMock.value = "10.00";
   fetchNewDayPreviewMock.mockResolvedValue({
     profile_id: "11111111-1111-1111-1111-111111111111",
     dailies: []
   });
-  startNewDayMock.mockResolvedValue({ updated_count: 0 });
+  startNewDayMock.mockResolvedValue({ updated_count: 0, protected_count: 0 });
 });
 
 describe("TaskBoardPage", () => {
+  it("does not check new day preview on first open for a profile", async () => {
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(new Date(2026, 2, 12, 12, 0, 0));
+      fetchTasksMock.mockResolvedValue([]);
+      fetchTagsMock.mockResolvedValue([]);
+
+      renderWithQueryClient(<TaskBoardPage />);
+      await flushScheduledUiWork();
+
+      expect(fetchNewDayPreviewMock).not.toHaveBeenCalled();
+      expect(
+        window.localStorage.getItem("taskweb.last_active_day.11111111-1111-1111-1111-111111111111")
+      ).toBe("2026-03-12");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("checks new day preview using the stored last active day", async () => {
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(new Date(2026, 2, 12, 12, 0, 0));
+      window.localStorage.setItem(
+        "taskweb.last_active_day.11111111-1111-1111-1111-111111111111",
+        "2026-03-11"
+      );
+      fetchTasksMock.mockResolvedValue([]);
+      fetchTagsMock.mockResolvedValue([]);
+
+      renderWithQueryClient(<TaskBoardPage />);
+      await flushScheduledUiWork();
+
+      expect(fetchNewDayPreviewMock).toHaveBeenCalledWith(
+        "11111111-1111-1111-1111-111111111111",
+        "2026-03-11"
+      );
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("loads tasks for the active profile", async () => {
     fetchTasksMock.mockResolvedValue([makeTask({ id: "t1", task_type: "habit", title: "Drink water" })]);
     fetchTagsMock.mockResolvedValue([]);
@@ -170,6 +218,10 @@ describe("TaskBoardPage", () => {
     vi.useFakeTimers();
     try {
       vi.setSystemTime(new Date(2026, 2, 12, 12, 0, 0));
+      window.localStorage.setItem(
+        "taskweb.last_active_day.11111111-1111-1111-1111-111111111111",
+        "2026-03-11"
+      );
       fetchTasksMock.mockResolvedValue([]);
       fetchTagsMock.mockResolvedValue([]);
       fetchNewDayPreviewMock.mockResolvedValue({
@@ -181,7 +233,13 @@ describe("TaskBoardPage", () => {
             previous_period_start: "2026-03-11",
             last_completion_period: null,
             repeat_cadence: "day",
-            repeat_every: 1
+            repeat_every: 1,
+            current_streak: 0,
+            missed_period_count: 0,
+            completion_gold_delta: "1.00",
+            streak_protection_cost: "1.00",
+            protection_cost: "0.00",
+            can_protect: false
           }
         ]
       });
@@ -200,8 +258,67 @@ describe("TaskBoardPage", () => {
       });
       await flushScheduledUiWork();
 
-      expect(fetchNewDayPreviewMock).toHaveBeenCalledTimes(2);
+      expect(fetchNewDayPreviewMock.mock.calls.length).toBeGreaterThanOrEqual(2);
+      expect(fetchNewDayPreviewMock).toHaveBeenLastCalledWith(
+        "11111111-1111-1111-1111-111111111111",
+        "2026-03-12"
+      );
       expect(screen.getByRole("heading", { name: "New Day" })).toBeTruthy();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("keeps check and protect mutually exclusive and sends the selected action", async () => {
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(new Date(2026, 2, 12, 12, 0, 0));
+      window.localStorage.setItem(
+        "taskweb.last_active_day.11111111-1111-1111-1111-111111111111",
+        "2026-03-11"
+      );
+      fetchTasksMock.mockResolvedValue([]);
+      fetchTagsMock.mockResolvedValue([]);
+      fetchNewDayPreviewMock.mockResolvedValue({
+        profile_id: "11111111-1111-1111-1111-111111111111",
+        dailies: [
+          {
+            id: "d1",
+            title: "Protectable daily",
+            previous_period_start: "2026-03-11",
+            last_completion_period: "2026-03-09",
+            repeat_cadence: "day",
+            repeat_every: 1,
+            current_streak: 3,
+            missed_period_count: 2,
+            completion_gold_delta: "5.00",
+            streak_protection_cost: "2.00",
+            protection_cost: "4.00",
+            can_protect: true
+          }
+        ]
+      });
+
+      renderWithQueryClient(<TaskBoardPage />);
+      await flushScheduledUiWork();
+
+      const protectBox = screen.getByRole("checkbox", { name: "Protect" }) as HTMLInputElement;
+      const checkBox = screen.getByRole("checkbox", { name: "Check" }) as HTMLInputElement;
+
+      fireEvent.click(protectBox);
+      expect(protectBox.checked).toBe(true);
+      expect(checkBox.checked).toBe(false);
+
+      fireEvent.click(checkBox);
+      expect(checkBox.checked).toBe(true);
+      expect(protectBox.checked).toBe(false);
+
+      await act(async () => {
+        fireEvent.click(screen.getByRole("button", { name: "Start New Day" }));
+        await Promise.resolve();
+      });
+
+      expect(startNewDayMock).toHaveBeenCalledWith("11111111-1111-1111-1111-111111111111", ["d1"], []);
     } finally {
       vi.useRealTimers();
     }

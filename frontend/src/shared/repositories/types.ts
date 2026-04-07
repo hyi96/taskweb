@@ -16,6 +16,7 @@ export type CreateTaskInput = {
   gold_delta?: string;
   repeat_cadence?: string;
   repeat_every?: number;
+  streak_protection_cost?: string;
   is_repeatable?: boolean;
 };
 
@@ -30,6 +31,7 @@ export type UpdateTaskInput = {
   repeat_cadence?: string | null;
   repeat_every?: number;
   streak_goal?: number;
+  streak_protection_cost?: string;
   autocomplete_time_threshold?: string | null;
   due_at?: string | null;
   is_repeatable?: boolean;
@@ -46,6 +48,7 @@ export type ActivityDurationInput = {
 export interface ProfilesRepository {
   fetchAll(): Promise<Profile[]>;
   create(name: string): Promise<Profile>;
+  update(profileId: string, input: { name?: string; is_vacation_mode?: boolean }): Promise<Profile>;
   delete(profileId: string): Promise<void>;
   exportTaskApp(profileId: string): Promise<Blob>;
   importTaskApp(profileId: string, file: File): Promise<TaskAppImportResult>;
@@ -100,8 +103,8 @@ export interface ActivityRepository {
 }
 
 export interface NewDayRepository {
-  preview(profileId: string): Promise<NewDayPreview>;
-  start(profileId: string, checkedDailyIds: string[]): Promise<{ updated_count: number }>;
+  preview(profileId: string, lastActiveDate?: string | null): Promise<NewDayPreview>;
+  start(profileId: string, checkedDailyIds: string[], protectedDailyIds?: string[]): Promise<{ updated_count: number; protected_count?: number }>;
 }
 
 export interface TaskwebRepositories {

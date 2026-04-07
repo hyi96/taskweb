@@ -117,6 +117,34 @@ class TaskAppPortabilityServiceTests(TestCase):
         todo = next(item for item in tasks_payload if item.get("$type") == "Todo")
         self.assertEqual(todo["DueDate"], "2026-01-14T23:59:59-08:00")
 
+    def test_daily_streak_protection_cost_survives_taskapp_round_trip(self):
+        Task.objects.create(
+            profile=self.profile,
+            task_type=Task.TaskType.DAILY,
+            title="Protected daily",
+            gold_delta=Decimal("2.00"),
+            repeat_cadence=Task.Cadence.DAY,
+            repeat_every=1,
+            streak_protection_cost=Decimal("4.50"),
+        )
+
+        archive_bytes, _ = TaskAppPortabilityService.export_profile_archive(profile=self.profile, user=self.user)
+        with zipfile.ZipFile(io.BytesIO(archive_bytes), "r") as archive:
+            tasks_payload = json.loads(archive.read("data/tasks.json"))
+
+        daily = next(item for item in tasks_payload if item.get("$type") == "Daily")
+        self.assertEqual(daily["StreakProtectionCost"], 4.5)
+
+        imported_profile = Profile.objects.create(account=self.user, name="Imported Protected")
+        TaskAppPortabilityService.import_profile_archive(
+            profile=imported_profile,
+            user=self.user,
+            archive_file=io.BytesIO(archive_bytes),
+        )
+
+        imported_daily = Task.objects.get(profile=imported_profile, title="Protected daily")
+        self.assertEqual(imported_daily.streak_protection_cost, Decimal("4.50"))
+
     def test_import_numeric_weekly_cadence_does_not_false_positive_in_new_day_prompt(self):
         now = timezone.make_aware(datetime(2026, 2, 21, 12, 0, 0))
         archive_buffer = io.BytesIO()

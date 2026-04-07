@@ -22,6 +22,7 @@ function makeTask(partial: Partial<Task> & Pick<Task, "id" | "task_type" | "titl
     current_streak: 0,
     best_streak: 0,
     streak_goal: 0,
+    streak_protection_cost: "1.00",
     last_completion_period: null,
     autocomplete_time_threshold: null,
     due_at: null,

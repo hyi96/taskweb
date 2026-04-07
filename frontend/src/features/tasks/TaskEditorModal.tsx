@@ -19,6 +19,7 @@ type TaskEditorSubmit = {
     count_reset_cadence?: string | null;
     repeat_cadence?: string | null;
     repeat_every?: number;
+    streak_protection_cost?: string;
     autocomplete_time_threshold?: string | null;
     due_at?: string | null;
     is_repeatable?: boolean;
@@ -129,6 +130,7 @@ export function TaskEditorModal({ profileId, task, onClose, onSubmit, onDelete }
   const [countResetCadence, setCountResetCadence] = useState(task?.count_reset_cadence ?? "never");
   const [repeatCadence, setRepeatCadence] = useState(task?.repeat_cadence ?? "day");
   const [repeatEvery, setRepeatEvery] = useState(task?.repeat_every ?? 1);
+  const [streakProtectionCost, setStreakProtectionCost] = useState(task?.streak_protection_cost ?? "1.00");
   const [autocompleteThreshold, setAutocompleteThreshold] = useState(task?.autocomplete_time_threshold ?? "");
   const initialTodoDue = toTodoDueParts(task?.due_at ?? null);
   const [dueDate, setDueDate] = useState(initialTodoDue.datePart);
@@ -158,6 +160,7 @@ export function TaskEditorModal({ profileId, task, onClose, onSubmit, onDelete }
     setCountResetCadence(task.count_reset_cadence ?? "never");
     setRepeatCadence(task.repeat_cadence ?? "day");
     setRepeatEvery(task.repeat_every);
+    setStreakProtectionCost(task.streak_protection_cost ?? "1.00");
     setAutocompleteThreshold(task.autocomplete_time_threshold ?? "");
     const dueParts = toTodoDueParts(task.due_at);
     setDueDate(dueParts.datePart);
@@ -252,6 +255,9 @@ export function TaskEditorModal({ profileId, task, onClose, onSubmit, onDelete }
       if (!Number.isInteger(repeatEvery) || repeatEvery < 1) {
         return "Daily repeat every must be at least 1.";
       }
+      if (!Number.isFinite(Number(streakProtectionCost)) || Number(streakProtectionCost) < 0) {
+        return "Streak protection cost must be 0 or greater.";
+      }
       if (autocompleteThreshold && !/^\d{1,3}:\d{2}:\d{2}$/.test(autocompleteThreshold)) {
         return "Autocomplete threshold must be HH:MM:SS.";
       }
@@ -294,6 +300,7 @@ export function TaskEditorModal({ profileId, task, onClose, onSubmit, onDelete }
     if (taskType === "daily") {
       payload.repeat_cadence = repeatCadence;
       payload.repeat_every = repeatEvery;
+      payload.streak_protection_cost = Number(streakProtectionCost).toFixed(2);
       payload.autocomplete_time_threshold = autocompleteThreshold.trim() || null;
       payload.streak_bonus_rules = streakRulesDraft
         .filter((rule) => rule.streak_goal > 0)
@@ -475,6 +482,16 @@ export function TaskEditorModal({ profileId, task, onClose, onSubmit, onDelete }
                   min={1}
                   value={repeatEvery}
                   onChange={(event) => setRepeatEvery(Math.max(1, Number(event.target.value) || 1))}
+                />
+              </label>
+              <label>
+                Streak protection cost
+                <input
+                  type="number"
+                  min={0}
+                  step="0.50"
+                  value={streakProtectionCost}
+                  onChange={(event) => setStreakProtectionCost(event.target.value)}
                 />
               </label>
               <label>

@@ -143,10 +143,17 @@ class LocalToCloudMigrationService:
         }
 
         source_balance = source_profile.get("gold_balance")
+        source_vacation = source_profile.get("is_vacation_mode")
+        update_fields: list[str] = []
         if source_balance not in (None, ""):
             profile.gold_balance = _as_decimal(source_balance, default="0")
+            update_fields.append("gold_balance")
+        if isinstance(source_vacation, bool):
+            profile.is_vacation_mode = source_vacation
+            update_fields.append("is_vacation_mode")
+        if update_fields:
             profile.full_clean()
-            profile.save(update_fields=["gold_balance"])
+            profile.save(update_fields=update_fields)
 
         tag_map = cls._migrate_tags(profile=profile, payload=payload, result=result)
         task_map = cls._migrate_tasks(profile=profile, payload=payload, result=result, tag_map=tag_map)
@@ -228,6 +235,7 @@ class LocalToCloudMigrationService:
             "current_streak": _as_int(item.get("current_streak"), default=0),
             "best_streak": _as_int(item.get("best_streak"), default=0),
             "streak_goal": _as_int(item.get("streak_goal"), default=0),
+            "streak_protection_cost": _as_decimal(item.get("streak_protection_cost"), default="1"),
             "last_completion_period": _as_date(item.get("last_completion_period")),
             "autocomplete_time_threshold": _as_duration(item.get("autocomplete_time_threshold")),
             "due_at": _as_datetime(item.get("due_at")),

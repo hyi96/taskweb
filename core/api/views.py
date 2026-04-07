@@ -22,6 +22,7 @@ from core.api.serializers import (
     ChecklistItemSerializer,
     LogEntrySerializer,
     NewDayPreviewSerializer,
+    NewDayPreviewQuerySerializer,
     NewDayStartSerializer,
     ProfileSerializer,
     StreakBonusRuleSerializer,
@@ -33,9 +34,10 @@ from core.models import ChecklistItem, LogEntry, Profile, StreakBonusRule, Tag, 
 from core.services.site_phrase import get_daily_phrase
 from core.services.task_actions import (
     daily_complete,
-    get_uncompleted_dailies_from_previous_period,
+    get_uncompleted_dailies_since_last_active,
     habit_increment,
     log_activity_duration,
+    protect_all_daily_streaks_for_vacation,
     refresh_profile_period_state,
     reward_claim,
     start_new_day,
@@ -375,7 +377,7 @@ class TaskViewSet(ProfileScopedMixin, viewsets.ModelViewSet):
         profile_id = self._required_profile_id_from_query()
         profile = self._profile_or_404(profile_id)
         try:
-            refresh_profile_period_state(profile=profile, user=request.user)
+            refresh_profile_period_state(profile=profile, user=request.user, include_daily_streaks=False)
         except DjangoValidationError as exc:
             raise _to_drf_validation_error(exc) from exc
         return super().list(request, *args, **kwargs)
@@ -384,7 +386,7 @@ class TaskViewSet(ProfileScopedMixin, viewsets.ModelViewSet):
         profile_id = self._required_profile_id_from_query()
         profile = self._profile_or_404(profile_id)
         try:
-            refresh_profile_period_state(profile=profile, user=request.user)
+            refresh_profile_period_state(profile=profile, user=request.user, include_daily_streaks=False)
         except DjangoValidationError as exc:
             raise _to_drf_validation_error(exc) from exc
         return super().retrieve(request, *args, **kwargs)
@@ -410,7 +412,7 @@ class TaskViewSet(ProfileScopedMixin, viewsets.ModelViewSet):
         data = self._action_payload(request)
         profile = self._profile_or_404(data["profile_id"])
         try:
-            refresh_profile_period_state(profile=profile, user=request.user)
+            refresh_profile_period_state(profile=profile, user=request.user, include_daily_streaks=False)
         except DjangoValidationError as exc:
             raise _to_drf_validation_error(exc) from exc
         task = self._task_or_404(profile, pk)
@@ -431,7 +433,7 @@ class TaskViewSet(ProfileScopedMixin, viewsets.ModelViewSet):
         data = self._action_payload(request)
         profile = self._profile_or_404(data["profile_id"])
         try:
-            refresh_profile_period_state(profile=profile, user=request.user)
+            refresh_profile_period_state(profile=profile, user=request.user, include_daily_streaks=False)
         except DjangoValidationError as exc:
             raise _to_drf_validation_error(exc) from exc
         task = self._task_or_404(profile, pk)
@@ -452,7 +454,7 @@ class TaskViewSet(ProfileScopedMixin, viewsets.ModelViewSet):
         data = self._action_payload(request)
         profile = self._profile_or_404(data["profile_id"])
         try:
-            refresh_profile_period_state(profile=profile, user=request.user)
+            refresh_profile_period_state(profile=profile, user=request.user, include_daily_streaks=False)
         except DjangoValidationError as exc:
             raise _to_drf_validation_error(exc) from exc
         task = self._task_or_404(profile, pk)
@@ -472,7 +474,7 @@ class TaskViewSet(ProfileScopedMixin, viewsets.ModelViewSet):
         data = self._action_payload(request)
         profile = self._profile_or_404(data["profile_id"])
         try:
-            refresh_profile_period_state(profile=profile, user=request.user)
+            refresh_profile_period_state(profile=profile, user=request.user, include_daily_streaks=False)
         except DjangoValidationError as exc:
             raise _to_drf_validation_error(exc) from exc
         task = self._task_or_404(profile, pk)
@@ -529,10 +531,27 @@ class NewDayViewSet(ProfileScopedMixin, viewsets.ViewSet):
 
     def list(self, request):
         profile_id = self._required_profile_id_from_query()
+        query = NewDayPreviewQuerySerializer(data=request.query_params)
+        query.is_valid(raise_exception=True)
         profile = self._profile_or_404(profile_id)
+        last_active_date = query.validated_data.get("last_active_date")
         try:
-            refresh_profile_period_state(profile=profile, user=request.user)
-            dailies = get_uncompleted_dailies_from_previous_period(profile=profile, user=request.user)
+            dailies = []
+            if profile.is_vacation_mode and last_active_date is not None:
+                protect_all_daily_streaks_for_vacation(
+                    profile=profile,
+                    user=request.user,
+                    last_active_date=last_active_date,
+                )
+                refresh_profile_period_state(profile=profile, user=request.user)
+            else:
+                dailies = get_uncompleted_dailies_since_last_active(
+                    profile=profile,
+                    user=request.user,
+                    last_active_date=last_active_date,
+                )
+                if not dailies:
+                    refresh_profile_period_state(profile=profile, user=request.user)
         except DjangoValidationError as exc:
             raise _to_drf_validation_error(exc) from exc
         payload = {"profile_id": str(profile.id), "dailies": dailies}
@@ -549,6 +568,7 @@ class NewDayViewSet(ProfileScopedMixin, viewsets.ViewSet):
                 profile=profile,
                 user=request.user,
                 checked_daily_ids=data.get("checked_daily_ids", []),
+                protected_daily_ids=data.get("protected_daily_ids", []),
             )
         except DjangoValidationError as exc:
             raise _to_drf_validation_error(exc) from exc

@@ -25,6 +25,7 @@ TASKAPP_LOG_TYPE_MAP = {
     2: LogEntry.LogType.TODO_COMPLETED,
     3: LogEntry.LogType.REWARD_CLAIMED,
     4: LogEntry.LogType.ACTIVITY_DURATION,
+    5: LogEntry.LogType.DAILY_STREAK_PROTECTED,
 }
 
 TASKAPP_LOG_TYPE_REVERSE_MAP = {value: key for key, value in TASKAPP_LOG_TYPE_MAP.items()}
@@ -295,6 +296,7 @@ class TaskAppPortabilityService:
                 entry["LastCompletionPeriod"] = (
                     task.last_completion_period.isoformat() if task.last_completion_period else None
                 )
+                entry["StreakProtectionCost"] = float(task.streak_protection_cost)
                 entry["RewardGoalFulfilled"] = task.current_streak >= max(task.streak_goal, 1)
                 entry["AutocompleteTimeThresholdTicks"] = _duration_ticks(task.autocomplete_time_threshold)
                 entry["StreakBonusRules"] = [
@@ -668,6 +670,7 @@ class TaskAppPortabilityService:
             task.repeat_every = max(1, int(payload.get("RepeatEvery") or 1))
             task.current_streak = max(0, int(payload.get("CurrentStreak") or 0))
             task.best_streak = max(task.current_streak, int(payload.get("BestStreak") or 0))
+            task.streak_protection_cost = _to_decimal(payload.get("StreakProtectionCost"), default="1")
             completed_at = _parse_datetime(payload.get("LastCompletedDate"))
             derived_period = _derive_daily_completion_period(
                 completed_at=completed_at,

@@ -896,6 +896,32 @@ body {
   padding: 7px 9px;
 }
 
+.new-day-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 16px;
+  margin-top: 10px;
+}
+
+.new-day-item {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  width: 100%;
+  align-items: flex-start;
+}
+
+.new-day-item-copy {
+  min-width: 0;
+}
+
+.new-day-item-controls {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+}
+
 .task-meta {
   display: block;
   margin-top: 4px;
@@ -1147,6 +1173,17 @@ body {
     width: 100%;
     margin-left: 0;
     justify-content: flex-end;
+  }
+
+  .new-day-item {
+    flex-direction: column;
+  }
+
+  .new-day-item-controls {
+    width: 100%;
+    flex-direction: row;
+    flex-wrap: wrap;
+    gap: 12px;
   }
 }
 

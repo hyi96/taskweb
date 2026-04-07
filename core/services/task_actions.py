@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from decimal import Decimal
 
 from django.core.exceptions import ValidationError
@@ -64,6 +64,72 @@ def _get_daily_period_start_for_task(*, task: Task, target_date):
     )
 
 
+def _get_daily_current_and_previous_periods(*, task: Task, today: date) -> tuple[date, date]:
+    current_period = _get_daily_period_start_for_task(task=task, target_date=today)
+    previous_period = previous_daily_period_start(
+        current_period_start=current_period,
+        cadence=task.repeat_cadence or Task.Cadence.DAY,
+        repeat_every=task.repeat_every,
+    )
+    return current_period, previous_period
+
+
+def _end_of_previous_period_timestamp(*, current_period_start: date) -> datetime:
+    current_period_dt = timezone.make_aware(
+        datetime.combine(current_period_start, datetime.min.time()),
+        timezone.get_current_timezone(),
+    )
+    return current_period_dt - timedelta(minutes=1)
+
+
+def _next_daily_streak_for_completion(*, task: Task, completion_period: date) -> int:
+    if task.last_completion_period is None:
+        return 1
+    expected_prev = previous_daily_period_start(
+        current_period_start=completion_period,
+        cadence=task.repeat_cadence or Task.Cadence.DAY,
+        repeat_every=task.repeat_every,
+    )
+    return task.current_streak + 1 if task.last_completion_period == expected_prev else 1
+
+
+def _daily_bonus_percent_for_streak(*, task: Task, streak: int) -> Decimal:
+    rules = list(task.streak_bonus_rules.all())
+    eligible = [rule.bonus_percent for rule in rules if rule.streak_goal <= streak]
+    return max(eligible, default=Decimal("0"))
+
+
+def _daily_completion_gold_delta(*, task: Task, completion_period: date) -> Decimal:
+    next_streak = _next_daily_streak_for_completion(task=task, completion_period=completion_period)
+    base_gold = _to_cents(task.gold_delta)
+    bonus_percent = _daily_bonus_percent_for_streak(task=task, streak=next_streak)
+    return _to_cents(base_gold * (Decimal("1") + (bonus_percent / Decimal("100"))))
+
+
+def _daily_missed_period_count(*, task: Task, previous_period: date) -> int:
+    if task.current_streak <= 0 or task.last_completion_period is None:
+        return 0
+    if task.last_completion_period >= previous_period:
+        return 0
+
+    missed = 0
+    period = previous_period
+    while period > task.last_completion_period and missed < 365:
+        missed += 1
+        period = previous_daily_period_start(
+            current_period_start=period,
+            cadence=task.repeat_cadence or Task.Cadence.DAY,
+            repeat_every=task.repeat_every,
+        )
+    return missed
+
+
+def _daily_protection_cost(*, task: Task, previous_period: date) -> Decimal:
+    missed_periods = _daily_missed_period_count(task=task, previous_period=previous_period)
+    unit_cost = _to_cents(task.streak_protection_cost)
+    return _to_cents(unit_cost * Decimal(missed_periods))
+
+
 def _apply_habit_reset_if_needed(*, task: Task, today):
     cadence = task.count_reset_cadence
     if cadence in {None, "", Task.Cadence.NEVER}:
@@ -81,8 +147,21 @@ def _apply_habit_reset_if_needed(*, task: Task, today):
 
 
 @transaction.atomic
-def refresh_profile_period_state(*, profile: Profile, user, timestamp: datetime | None = None) -> None:
-    """Refresh cadence-driven task state at read-time (daily streak rollover, habit reset rollover)."""
+def refresh_profile_period_state(
+    *,
+    profile: Profile,
+    user,
+    timestamp: datetime | None = None,
+    include_daily_streaks: bool = True,
+) -> None:
+    """Refresh cadence-driven task state.
+
+    TaskApp no longer refreshes daily streaks during general data loading because that
+    can destroy recoverable streaks before the new-day workflow has a chance to check
+    or protect missed periods. Taskweb follows the same rule: most reads refresh habit
+    reset state only, while the new-day flow performs the full daily refresh after the
+    review step is handled.
+    """
     now = _as_aware_timestamp(timestamp)
     today = local_date_from_dt(now)
 
@@ -93,27 +172,28 @@ def refresh_profile_period_state(*, profile: Profile, user, timestamp: datetime 
     dailies = list(Task.objects.select_for_update().filter(profile=locked_profile, task_type=Task.TaskType.DAILY))
     habits = list(Task.objects.select_for_update().filter(profile=locked_profile, task_type=Task.TaskType.HABIT))
 
-    for daily in dailies:
-        if daily.last_completion_period is None:
-            continue
-        current_period = _get_daily_period_start_for_task(task=daily, target_date=today)
-        expected_prev = previous_daily_period_start(
-            current_period_start=current_period,
-            cadence=daily.repeat_cadence or Task.Cadence.DAY,
-            repeat_every=daily.repeat_every,
-        )
-        # Keep the streak intact while the immediately previous period can still be
-        # recovered through the "new day" backfill modal. Only reset once the task
-        # has fallen more than one period behind.
-        recoverable_prev = previous_daily_period_start(
-            current_period_start=expected_prev,
-            cadence=daily.repeat_cadence or Task.Cadence.DAY,
-            repeat_every=daily.repeat_every,
-        )
-        if daily.last_completion_period < recoverable_prev and daily.current_streak != 0:
-            daily.current_streak = 0
-            daily.full_clean()
-            daily.save(update_fields=["current_streak", "updated_at"])
+    if include_daily_streaks:
+        for daily in dailies:
+            if daily.last_completion_period is None:
+                continue
+            current_period = _get_daily_period_start_for_task(task=daily, target_date=today)
+            expected_prev = previous_daily_period_start(
+                current_period_start=current_period,
+                cadence=daily.repeat_cadence or Task.Cadence.DAY,
+                repeat_every=daily.repeat_every,
+            )
+            # Keep the streak intact while the immediately previous period can still be
+            # recovered through the "new day" backfill modal. Only reset once the task
+            # has fallen more than one period behind.
+            recoverable_prev = previous_daily_period_start(
+                current_period_start=expected_prev,
+                cadence=daily.repeat_cadence or Task.Cadence.DAY,
+                repeat_every=daily.repeat_every,
+            )
+            if daily.last_completion_period < recoverable_prev and daily.current_streak != 0:
+                daily.current_streak = 0
+                daily.full_clean()
+                daily.save(update_fields=["current_streak", "updated_at"])
 
     for habit in habits:
         if _apply_habit_reset_if_needed(task=habit, today=today):
@@ -242,33 +322,41 @@ def daily_complete(
     return task
 
 
-def get_uncompleted_dailies_from_previous_period(*, profile: Profile, user, timestamp: datetime | None = None):
+def get_uncompleted_dailies_since_last_active(
+    *,
+    profile: Profile,
+    user,
+    last_active_date: date | None = None,
+    timestamp: datetime | None = None,
+):
     now = _as_aware_timestamp(timestamp)
     today = local_date_from_dt(now)
     if profile.account_id != user.id:
         raise ValidationError({"profile_id": "Profile does not belong to the authenticated user."})
 
+    if last_active_date is None:
+        last_active_date = today - timedelta(days=1)
+
     results = []
-    dailies = Task.objects.filter(profile=profile, task_type=Task.TaskType.DAILY).order_by("title")
+    dailies = (
+        Task.objects.filter(profile=profile, task_type=Task.TaskType.DAILY)
+        .prefetch_related("streak_bonus_rules")
+        .order_by("title")
+    )
     for daily in dailies:
-        current_period = _get_daily_period_start_for_task(task=daily, target_date=today)
-        previous_period = previous_daily_period_start(
-            current_period_start=current_period,
-            cadence=daily.repeat_cadence or Task.Cadence.DAY,
-            repeat_every=daily.repeat_every,
-        )
+        current_period, previous_period = _get_daily_current_and_previous_periods(task=daily, today=today)
+        last_active_period = _get_daily_period_start_for_task(task=daily, target_date=last_active_date)
+        if current_period == last_active_period:
+            continue
         created_local_date = timezone.localtime(daily.created_at).date()
         # New tasks must not be considered "missed" for periods before they existed.
         if created_local_date > previous_period:
             continue
-        # If task is already completed in the current period, do not prompt
-        # "new day" backfill for the previous period.
-        if daily.last_completion_period == current_period:
+        if daily.last_completion_period is not None and daily.last_completion_period >= previous_period:
             continue
-        if current_period == previous_period:
-            continue
-        if daily.last_completion_period == previous_period:
-            continue
+        completion_gold_delta = _daily_completion_gold_delta(task=daily, completion_period=previous_period)
+        missed_period_count = _daily_missed_period_count(task=daily, previous_period=previous_period)
+        protection_cost = _daily_protection_cost(task=daily, previous_period=previous_period)
         results.append(
             {
                 "id": str(daily.id),
@@ -277,9 +365,62 @@ def get_uncompleted_dailies_from_previous_period(*, profile: Profile, user, time
                 "last_completion_period": daily.last_completion_period.isoformat() if daily.last_completion_period else None,
                 "repeat_cadence": daily.repeat_cadence,
                 "repeat_every": daily.repeat_every,
+                "current_streak": int(daily.current_streak),
+                "missed_period_count": missed_period_count,
+                "completion_gold_delta": completion_gold_delta,
+                "streak_protection_cost": _to_cents(daily.streak_protection_cost),
+                "protection_cost": protection_cost,
+                "can_protect": missed_period_count > 0 and daily.current_streak > 0 and daily.last_completion_period is not None,
             }
         )
     return results
+
+
+def get_uncompleted_dailies_from_previous_period(*, profile: Profile, user, timestamp: datetime | None = None):
+    return get_uncompleted_dailies_since_last_active(
+        profile=profile,
+        user=user,
+        last_active_date=None,
+        timestamp=timestamp,
+    )
+
+
+@transaction.atomic
+def protect_all_daily_streaks_for_vacation(
+    *,
+    profile: Profile,
+    user,
+    last_active_date: date | None,
+    timestamp: datetime | None = None,
+) -> dict[str, int]:
+    now = _as_aware_timestamp(timestamp)
+    today = local_date_from_dt(now)
+    if last_active_date is None:
+        return {"protected_count": 0}
+
+    locked_profile = Profile.objects.select_for_update().get(id=profile.id)
+    if locked_profile.account_id != user.id:
+        raise ValidationError({"profile_id": "Profile does not belong to the authenticated user."})
+
+    protected = 0
+    dailies = list(Task.objects.select_for_update().filter(profile=locked_profile, task_type=Task.TaskType.DAILY))
+    for daily in dailies:
+        current_period, previous_period = _get_daily_current_and_previous_periods(task=daily, today=today)
+        last_active_period = _get_daily_period_start_for_task(task=daily, target_date=last_active_date)
+        if current_period == last_active_period:
+            continue
+        created_local_date = timezone.localtime(daily.created_at).date()
+        if created_local_date > previous_period:
+            continue
+        if daily.current_streak <= 0 or daily.last_completion_period is None:
+            continue
+        if daily.last_completion_period >= previous_period:
+            continue
+        daily.last_completion_period = previous_period
+        daily.full_clean()
+        daily.save(update_fields=["last_completion_period", "updated_at"])
+        protected += 1
+    return {"protected_count": protected}
 
 
 @transaction.atomic
@@ -288,6 +429,7 @@ def start_new_day(
     profile: Profile,
     user,
     checked_daily_ids: list,
+    protected_daily_ids: list | None = None,
     timestamp: datetime | None = None,
 ):
     now = _as_aware_timestamp(timestamp)
@@ -297,17 +439,18 @@ def start_new_day(
         raise ValidationError({"profile_id": "Profile does not belong to the authenticated user."})
 
     updated = 0
+    protected = 0
     checked_set = {str(value) for value in checked_daily_ids}
+    protected_set = {str(value) for value in (protected_daily_ids or [])}
+    overlap = checked_set & protected_set
+    if overlap:
+        raise ValidationError({"protected_daily_ids": "A daily cannot be checked and protected at the same time."})
+
     dailies = list(
         Task.objects.select_for_update().filter(profile=locked_profile, task_type=Task.TaskType.DAILY, id__in=checked_set)
     )
     for daily in dailies:
-        current_period = _get_daily_period_start_for_task(task=daily, target_date=today)
-        previous_period = previous_daily_period_start(
-            current_period_start=current_period,
-            cadence=daily.repeat_cadence or Task.Cadence.DAY,
-            repeat_every=daily.repeat_every,
-        )
+        current_period, previous_period = _get_daily_current_and_previous_periods(task=daily, today=today)
         created_local_date = timezone.localtime(daily.created_at).date()
         if created_local_date > previous_period:
             continue
@@ -316,23 +459,60 @@ def start_new_day(
             continue
         if daily.last_completion_period == previous_period:
             continue
-        if daily.last_completion_period:
-            expected_prev = previous_daily_period_start(
-                current_period_start=previous_period,
-                cadence=daily.repeat_cadence or Task.Cadence.DAY,
-                repeat_every=daily.repeat_every,
-            )
-            daily.current_streak = daily.current_streak + 1 if daily.last_completion_period == expected_prev else 1
-        else:
-            daily.current_streak = 1
-        daily.best_streak = max(daily.best_streak, daily.current_streak)
+        completion_timestamp = _end_of_previous_period_timestamp(current_period_start=current_period)
+        daily_complete(
+            task=daily,
+            profile=locked_profile,
+            user=user,
+            timestamp=completion_timestamp,
+            completion_period=previous_period,
+        )
+        updated += 1
+    if checked_set:
+        locked_profile.refresh_from_db()
+
+    protected_dailies = list(
+        Task.objects.select_for_update().filter(profile=locked_profile, task_type=Task.TaskType.DAILY, id__in=protected_set)
+    )
+    for daily in protected_dailies:
+        current_period, previous_period = _get_daily_current_and_previous_periods(task=daily, today=today)
+        created_local_date = timezone.localtime(daily.created_at).date()
+        if created_local_date > previous_period:
+            continue
+        if daily.last_completion_period == current_period:
+            continue
+        missed_periods = _daily_missed_period_count(task=daily, previous_period=previous_period)
+        if missed_periods <= 0:
+            continue
+        cost = _daily_protection_cost(task=daily, previous_period=previous_period)
+        if locked_profile.gold_balance < cost:
+            raise ValidationError({"protected_daily_ids": "Insufficient gold to protect selected streaks."})
+
+        locked_profile.gold_balance = _to_cents(locked_profile.gold_balance - cost)
         daily.last_completion_period = previous_period
         daily.full_clean()
-        daily.save(update_fields=["current_streak", "best_streak", "last_completion_period", "updated_at"])
-        updated += 1
+        daily.save(update_fields=["last_completion_period", "updated_at"])
+
+        log = LogEntry(
+            profile=locked_profile,
+            timestamp=_end_of_previous_period_timestamp(current_period_start=current_period),
+            type=LogEntry.LogType.DAILY_STREAK_PROTECTED,
+            task=daily,
+            reward=None,
+            gold_delta=-cost,
+            user_gold=locked_profile.gold_balance,
+            count_delta=None,
+            duration=None,
+            title_snapshot=daily.title,
+        )
+        locked_profile.full_clean()
+        locked_profile.save(update_fields=["gold_balance"])
+        log.full_clean()
+        log.save()
+        protected += 1
 
     refresh_profile_period_state(profile=locked_profile, user=user, timestamp=now)
-    return {"updated_count": updated}
+    return {"updated_count": updated, "protected_count": protected}
 
 
 @transaction.atomic

@@ -4,6 +4,7 @@ import {
   exportProfileTaskApp,
   fetchProfiles,
   importProfileTaskApp,
+  updateProfile,
 } from "../api/profiles";
 import {
   createTask,
@@ -27,6 +28,7 @@ export const apiRepository: TaskwebRepositories = {
   profiles: {
     fetchAll: fetchProfiles,
     create: createProfile,
+    update: updateProfile,
     delete: deleteProfile,
     exportTaskApp: exportProfileTaskApp,
     importTaskApp: importProfileTaskApp,
@@ -64,6 +66,6 @@ export const apiRepository: TaskwebRepositories = {
   },
   newDay: {
     preview: fetchNewDayPreview,
-    start: startNewDay,
+    start: (profileId, checkedDailyIds, protectedDailyIds) => startNewDay(profileId, checkedDailyIds, protectedDailyIds),
   },
 };

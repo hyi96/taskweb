@@ -23,6 +23,7 @@ class Profile(models.Model):
 
     # cached balance (logs can remain the audit trail)
     gold_balance = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    is_vacation_mode = models.BooleanField(default=False)
 
     class Meta:
         constraints = [
@@ -136,6 +137,12 @@ class Task(models.Model):
     current_streak = models.PositiveIntegerField(default=0)
     best_streak = models.PositiveIntegerField(default=0)
     streak_goal = models.PositiveIntegerField(default=0)
+    streak_protection_cost = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        default=1,
+        validators=[MinValueValidator(0)],
+    )
 
     # Rough equivalent to DateOnly? _lastCompletionPeriod
     # (store a date bucket; exact bucketing logic lives in service layer)
@@ -222,6 +229,7 @@ class Task(models.Model):
                     & Q(current_streak=0)
                     & Q(best_streak=0)
                     & Q(streak_goal=0)
+                    & Q(streak_protection_cost=1)
                     & Q(last_completion_period__isnull=True)
                     & Q(autocomplete_time_threshold__isnull=True)
                 ),
@@ -304,6 +312,7 @@ class StreakBonusRule(models.Model):
 class LogEntry(models.Model):
     class LogType(models.TextChoices):
         DAILY_COMPLETED = "daily_completed", "DailyCompleted"
+        DAILY_STREAK_PROTECTED = "daily_streak_protected", "DailyStreakProtected"
         HABIT_INCREMENTED = "habit_incremented", "HabitIncremented"
         TODO_COMPLETED = "todo_completed", "TodoCompleted"
         REWARD_CLAIMED = "reward_claimed", "RewardClaimed"
